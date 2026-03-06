@@ -115,6 +115,15 @@ export default function Scanner() {
         const trimmedId = id.trim();
         if (!trimmedId) return;
 
+        // Check if a personnel QR is scanned instead of an order QR
+        if (trimmedId.startsWith('qr_auth_')) {
+            setErrorMsg("HATA: Personel kartı okutuldu! Lütfen işlem yapmak için sipariş (ürün) QR kodunu okutunuz.");
+            setScanningStatus('error');
+            setFoundOrder(null);
+            setTimeout(() => setScanningStatus('idle'), 5000);
+            return;
+        }
+
         const order = INITIAL_ORDERS.find(o => o.id === trimmedId);
 
         if (!order) {
