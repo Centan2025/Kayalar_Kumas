@@ -5,7 +5,7 @@ export interface OfflineAction {
     order_id: string;
     station_id: string;
     user_id: string;
-    action_type: 'SCANNED_IN' | 'COMPLETED' | 'REJECTED' | 'PHOTO_UPLOADED';
+    action_type: 'SCANNED_IN' | 'COMPLETED' | 'REJECTED' | 'PHOTO_UPLOADED' | 'REVISION_CREATED';
     photo_url?: string;
     created_at: string;
     synced: boolean;
