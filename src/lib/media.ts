@@ -49,10 +49,14 @@ export async function uploadToR2(file: File, entityId: string): Promise<string> 
         // Path logic: qc-photos/ORD-1234/filename.webp
         const path = `photos/${entityId}/${file.name}`;
 
+        // Convert the File/Blob to a Uint8Array to avoid "readableStream.getReader is not a function" in browser/Vite environment
+        const arrayBuffer = await file.arrayBuffer();
+        const bodyData = new Uint8Array(arrayBuffer);
+
         const command = new PutObjectCommand({
             Bucket: bucket,
             Key: path,
-            Body: file,
+            Body: bodyData,
             ContentType: 'image/webp',
             // R2 uses standard S3 ACLs or public access settings
         });
