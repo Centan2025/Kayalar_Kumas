@@ -1,17 +1,22 @@
-import { useRef, useState } from 'react';
-import { Camera, X, Image as ImageIcon } from 'lucide-react';
-import { compressToWebP } from '../lib/media';
+import { useRef, useState, useEffect } from 'react';
+import { Camera, X, Loader2 } from 'lucide-react';
+import { compressToWebP, uploadToR2 } from '../lib/media';
 
 type Props = {
     label: string;
+    entityId: string;
     onImageSaved: (webpUrl: string) => void;
     existingImages?: string[];
 };
 
-export default function ImageUploader({ label, onImageSaved, existingImages = [] }: Props) {
+export default function ImageUploader({ label, entityId, onImageSaved, existingImages = [] }: Props) {
     const fileRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [images, setImages] = useState<string[]>(existingImages);
+
+    useEffect(() => {
+        setImages(existingImages);
+    }, [existingImages]);
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
@@ -19,18 +24,19 @@ export default function ImageUploader({ label, onImageSaved, existingImages = []
 
         try {
             const file = e.target.files[0];
-            console.log('Orijinal:', file.name, (file.size / 1024).toFixed(0), 'KB');
 
+            // 1. Sıkıştır
             const webpFile = await compressToWebP(file);
-            console.log('WebP:', webpFile.name, (webpFile.size / 1024).toFixed(0), 'KB');
 
-            // Local preview URL (gerçek uygulamada R2 URL döner)
-            const url = URL.createObjectURL(webpFile);
-            setImages(prev => [...prev, url]);
-            onImageSaved(url);
+            // 2. R2'ye Yükle
+            const publicUrl = await uploadToR2(webpFile, entityId);
+
+            // 3. Başarılı ise arayüzü ve üst bileşeni güncelle
+            setImages(prev => [...prev, publicUrl]);
+            onImageSaved(publicUrl);
         } catch (err) {
             console.error('Görsel yükleme hatası:', err);
-            alert('Görsel yüklenemedi: ' + err);
+            alert('Görsel yüklenemedi: ' + (err instanceof Error ? err.message : String(err)));
         } finally {
             setUploading(false);
             if (fileRef.current) fileRef.current.value = '';
@@ -64,7 +70,7 @@ export default function ImageUploader({ label, onImageSaved, existingImages = []
             <button onClick={() => fileRef.current?.click()} className="button button-outline" disabled={uploading}
                 style={{ fontSize: '0.8rem', padding: '0.5rem 1rem', gap: '0.5rem' }}>
                 {uploading ? (
-                    <><ImageIcon size={16} className="animate-spin" /> Sıkıştırılıyor (WebP)...</>
+                    <><Loader2 size={16} className="animate-spin" /> Yükleniyor...</>
                 ) : (
                     <><Camera size={16} /> Fotoğraf Ekle (.webp)</>
                 )}

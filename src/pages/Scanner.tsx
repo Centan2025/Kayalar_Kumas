@@ -3,19 +3,32 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, QrCode, CheckCircle, Database, AlertTriangle, Camera, CameraOff } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '../lib/db';
+import { useAuth } from '../context/AuthContext';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { INITIAL_ORDERS, type Order, type OrderStatus } from './Orders';
 
-const STATION_RULES: Record<string, { acceptStatus: OrderStatus; nextStatus: OrderStatus; label: string }> = {
-    cut: { acceptStatus: 'PENDING', nextStatus: 'CUTTING', label: 'Kesim İstasyonu' },
-    sew: { acceptStatus: 'CUTTING', nextStatus: 'SEWING', label: 'Dikim İstasyonu' },
+const STATION_RULES: Record<string, { acceptStatus: OrderStatus; nextStatus: OrderStatus; label: string; requiredRole: string }> = {
+    cut: { acceptStatus: 'PENDING', nextStatus: 'CUTTING', label: 'Kesim İstasyonu', requiredRole: 'CUTTER' },
+    sew: { acceptStatus: 'CUTTING', nextStatus: 'SEWING', label: 'Dikim İstasyonu', requiredRole: 'TAILOR' },
 };
 
 export default function Scanner() {
     const navigate = useNavigate();
+    const { user, profile } = useAuth();
     const [searchParams] = useSearchParams();
     const stationId = searchParams.get('station') || 'unknown';
     const stationRule = STATION_RULES[stationId];
+
+    // Yetki Kontrolü
+    useEffect(() => {
+        if (profile && stationRule) {
+            const hasAccess = profile.roles.includes('ADMIN') || profile.roles.includes(stationRule.requiredRole);
+            if (!hasAccess) {
+                alert(`Bu istasyonda (${stationRule.label}) işlem yapma yetkiniz bulunmuyor.`);
+                navigate('/dashboard');
+            }
+        }
+    }, [profile, stationRule, navigate]);
 
     const [scannedId, setScannedId] = useState('');
     const [scanningStatus, setScanningStatus] = useState<'idle' | 'success' | 'error' | 'wrong_station'>('idle');
@@ -48,11 +61,19 @@ export default function Scanner() {
                         processingRef.current = true;
                         setScannedId(decodedText);
                         // Kamerayı durdur ve işlemi başlat
-                        scanner.stop().then(() => {
-                            setCameraActive(false);
-                            processScannedId(decodedText);
-                            setTimeout(() => { processingRef.current = false; }, 1000);
-                        }).catch(console.error);
+                        if (scannerRef.current) {
+                            scannerRef.current.stop().then(() => {
+                                // Important: We don't remove scannerRef.current here, only after stop is successful if needed.
+                                // Actually, HTML5Qrcode.stop() is what we want.
+                                setCameraActive(false);
+                                processScannedId(decodedText);
+                                setTimeout(() => { processingRef.current = false; }, 1000);
+                            }).catch(err => {
+                                console.warn("Scanner stop error:", err);
+                                setCameraActive(false);
+                                processingRef.current = false;
+                            });
+                        }
                     }
                 },
                 () => { /* QR bulunamadı — sessiz */ }
@@ -123,7 +144,7 @@ export default function Scanner() {
             const actionData = {
                 order_id: trimmedId,
                 station_id: `station_${stationId}`,
-                user_id: localStorage.getItem('mock_token') || 'unknown_user',
+                user_id: user?.id || 'unknown_user',
                 action_type: 'COMPLETED' as const,
                 created_at: new Date().toISOString(),
                 synced: false
@@ -170,47 +191,44 @@ export default function Scanner() {
 
                 {/* Camera QR Scanner Area */}
                 <div style={{ width: '100%', maxWidth: '340px', marginBottom: '1.5rem' }}>
-                    {!cameraActive ? (
-                        <div style={{
-                            width: '100%', aspectRatio: '1', border: '2px dashed var(--primary)', borderRadius: '24px',
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: 'rgba(79,70,229,0.1)', position: 'relative', overflow: 'hidden'
-                        }}>
-                            {scanningStatus === 'success' ? (
-                                <CheckCircle size={64} color="var(--success)" className="animate-fade-in" />
-                            ) : scanningStatus === 'error' || scanningStatus === 'wrong_station' ? (
-                                <AlertTriangle size={64} color={scanningStatus === 'wrong_station' ? '#f59e0b' : '#ef4444'} className="animate-fade-in" />
-                            ) : (
-                                <>
-                                    <QrCode size={48} color="var(--primary)" style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                                    <button onClick={startCamera} className="button" style={{ gap: '0.5rem' }}>
-                                        <Camera size={20} /> Kamerayı Aç
-                                    </button>
-                                </>
-                            )}
+                    <div style={{
+                        display: !cameraActive ? 'flex' : 'none',
+                        width: '100%', aspectRatio: '1', border: '2px dashed var(--primary)', borderRadius: '24px',
+                        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: 'rgba(79,70,229,0.1)', position: 'relative', overflow: 'hidden'
+                    }}>
+                        {scanningStatus === 'success' ? (
+                            <CheckCircle size={64} color="var(--success)" className="animate-fade-in" />
+                        ) : scanningStatus === 'error' || scanningStatus === 'wrong_station' ? (
+                            <AlertTriangle size={64} color={scanningStatus === 'wrong_station' ? '#f59e0b' : '#ef4444'} className="animate-fade-in" />
+                        ) : (
+                            <>
+                                <QrCode size={48} color="var(--primary)" style={{ opacity: 0.5, marginBottom: '1rem' }} />
+                                <button onClick={startCamera} className="button" style={{ gap: '0.5rem' }}>
+                                    <Camera size={20} /> Kamerayı Aç
+                                </button>
+                            </>
+                        )}
 
-                            {scanningStatus === 'idle' && !cameraActive && (
-                                <div style={{
-                                    position: 'absolute', top: '10%', left: '10%', right: '10%', height: '2px',
-                                    backgroundColor: 'var(--primary)', boxShadow: '0 0 10px var(--primary)',
-                                    animation: 'scan 2.5s infinite linear'
-                                }} />
-                            )}
-                        </div>
-                    ) : (
-                        <div style={{ position: 'relative' }}>
-                            <div id={scannerContainerId} style={{ width: '100%', borderRadius: '16px', overflow: 'hidden' }}></div>
-                            <button onClick={stopCamera} style={{
-                                position: 'absolute', top: '0.5rem', right: '0.5rem', zIndex: 10,
-                                backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
-                                padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem'
-                            }}>
-                                <CameraOff size={16} /> Kapat
-                            </button>
-                        </div>
-                    )}
-                    {/* Hidden container for scanner when not active */}
-                    {!cameraActive && <div id={scannerContainerId} style={{ display: 'none' }}></div>}
+                        {scanningStatus === 'idle' && !cameraActive && (
+                            <div style={{
+                                position: 'absolute', top: '10%', left: '10%', right: '10%', height: '2px',
+                                backgroundColor: 'var(--primary)', boxShadow: '0 0 10px var(--primary)',
+                                animation: 'scan 2.5s infinite linear'
+                            }} />
+                        )}
+                    </div>
+
+                    <div style={{ position: 'relative', display: cameraActive ? 'block' : 'none' }}>
+                        <div id={scannerContainerId} style={{ width: '100%', borderRadius: '16px', overflow: 'hidden' }}></div>
+                        <button onClick={stopCamera} style={{
+                            position: 'absolute', top: '0.5rem', right: '0.5rem', zIndex: 10,
+                            backgroundColor: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
+                            padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem'
+                        }}>
+                            <CameraOff size={16} /> Kapat
+                        </button>
+                    </div>
                 </div>
 
                 {/* Camera Error */}

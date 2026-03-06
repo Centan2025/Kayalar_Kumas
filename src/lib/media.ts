@@ -1,4 +1,14 @@
 import imageCompression from 'browser-image-compression';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+
+const r2Client = new S3Client({
+    region: 'auto',
+    endpoint: import.meta.env.VITE_R2_ENDPOINT,
+    credentials: {
+        accessKeyId: import.meta.env.VITE_R2_ACCESS_KEY_ID,
+        secretAccessKey: import.meta.env.VITE_R2_SECRET_ACCESS_KEY,
+    }
+});
 
 /**
  * Compresses an image to WebP format.
@@ -8,7 +18,7 @@ import imageCompression from 'browser-image-compression';
 export async function compressToWebP(file: File): Promise<File> {
     const options = {
         maxSizeMB: 1,
-        maxWidthOrHeight: 1920,
+        maxWidthOrHeight: 1280, // Optimized for mobile/web
         useWebWorker: true,
         fileType: 'image/webp',
         initialQuality: 0.8
@@ -16,9 +26,9 @@ export async function compressToWebP(file: File): Promise<File> {
 
     try {
         const compressedBlob = await imageCompression(file, options);
-        // Convert Blob back to File with .webp extension
-        const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".webp";
-        return new File([compressedBlob], newFileName, { type: 'image/webp' });
+        // Convert Blob back to File with .webp extension and safe name
+        const safeName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9]/gi, '_').toLowerCase() + "_" + Date.now() + ".webp";
+        return new File([compressedBlob], safeName, { type: 'image/webp' });
     } catch (error) {
         console.error('Error compressing image:', error);
         throw error;
@@ -26,29 +36,37 @@ export async function compressToWebP(file: File): Promise<File> {
 }
 
 /**
- * Uploads a WebP file to Cloudflare R2 using a pre-signed URL (mocked).
+ * Uploads a WebP file to Cloudflare R2.
  * @param file The WebP file to upload
- * @param orderId Optional Order ID for tracking
+ * @param entityId Order ID or Material ID for path prefixing
  * @returns The final public URL of the uploaded image
  */
-export async function uploadToR2(file: File, orderId: string): Promise<string> {
+export async function uploadToR2(file: File, entityId: string): Promise<string> {
     try {
-        // 1. In a real app, first fetch the pre-signed URL from Supabase Edge Functions or your backend
-        // const { url, path } = await getPresignedUrlFromBackend(file.name);
+        const bucket = import.meta.env.VITE_R2_BUCKET_NAME;
+        const publicBaseUrl = import.meta.env.VITE_R2_PUBLIC_URL;
 
-        // 2. Upload to the pre-signed URL using PUT
-        // await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+        // Path logic: qc-photos/ORD-1234/filename.webp
+        const path = `photos/${entityId}/${file.name}`;
 
-        // For this demonstration, we'll return a mock URL
-        console.log(`[R2 MOCK UPLOAD] Mock uploading ${file.name} for Order ID ${orderId}`);
+        const command = new PutObjectCommand({
+            Bucket: bucket,
+            Key: path,
+            Body: file,
+            ContentType: 'image/webp',
+            // R2 uses standard S3 ACLs or public access settings
+        });
 
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await r2Client.send(command);
 
-        const mockUrl = `https://cdn.curtaintracker.mock/qc-photos/${orderId}-${Date.now()}.webp`;
-        return mockUrl;
+        // Return the final URL
+        return `${publicBaseUrl}/${path}`;
     } catch (error) {
         console.error('Error uploading to R2:', error);
+        // Inform user about potential CORS or key issues
+        if (error instanceof Error && error.name === 'CredentialsError') {
+            throw new Error('R2 Kimlik bilgileri hatalı veya süresi dolmuş.');
+        }
         throw error;
     }
 }

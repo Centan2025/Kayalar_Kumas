@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, ChevronDown, ChevronUp, QrCode } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
+import { supabase } from '../lib/supabase';
 
 export type OrderStatus = 'PENDING' | 'CUTTING' | 'SEWING' | 'QC' | 'READY' | 'IN_TRANSIT' | 'DELIVERED';
 
@@ -38,24 +39,25 @@ export type Order = {
     revisionCount: number;
     parentOrderId: string | null;
     parts: number;
+    imageUrls: string[];
 };
 
 // Shared mock data — export for use in Scanner, QC, etc.
 export const INITIAL_ORDERS: Order[] = [
-    { id: 'ORD-1029', customerName: 'Ayşe Yılmaz', customerPhone: '0532 111 22 33', customerAddress: 'Bağdat Cad. No:42 Daire:5', customerCity: 'İstanbul / Kadıköy', invoiceName: 'Ayşe Yılmaz', invoiceTaxNo: '', invoiceAddress: 'Bağdat Cad. No:42 Kadıköy/İstanbul', fabricCode: 'K-900', mechanism: 'Motorlu', width: 320, height: 260, pileRatio: 2.5, status: 'SEWING', notes: 'Lazer kesim yapılacak', createdAt: '2026-03-01', deliveryDate: '2026-03-10', revisionCount: 0, parentOrderId: null, parts: 2 },
-    { id: 'ORD-1050', customerName: 'Mehmet Demir', customerPhone: '0533 444 55 66', customerAddress: 'Atatürk Bulvarı No:88', customerCity: 'Ankara / Çankaya', invoiceName: 'Demir Mobilya Ltd.', invoiceTaxNo: '1234567890', invoiceAddress: 'Atatürk Bulvarı No:88 Çankaya/Ankara', fabricCode: 'T-120', mechanism: 'Manuel', width: 200, height: 240, pileRatio: 2.0, status: 'QC', notes: '', createdAt: '2026-03-03', deliveryDate: '2026-03-12', revisionCount: 1, parentOrderId: 'ORD-1049', parts: 1 },
-    { id: 'ORD-1051', customerName: 'Fatma Kara', customerPhone: '0535 777 88 99', customerAddress: 'Cumhuriyet Mah. 123 Sok. No:7', customerCity: 'İzmir / Karşıyaka', invoiceName: 'Fatma Kara', invoiceTaxNo: '', invoiceAddress: 'Cumhuriyet Mah. 123 Sok. No:7 Karşıyaka/İzmir', fabricCode: 'K-900', mechanism: 'Raylı', width: 400, height: 300, pileRatio: 3.0, status: 'PENDING', notes: 'Salon fon perde + tül', createdAt: '2026-03-05', deliveryDate: '2026-03-15', revisionCount: 0, parentOrderId: null, parts: 3 },
-    { id: 'ORD-1052', customerName: 'Ali Öztürk', customerPhone: '0537 000 11 22', customerAddress: 'Sahil Yolu Cd. No:15', customerCity: 'Antalya / Muratpaşa', invoiceName: 'Ali Öztürk', invoiceTaxNo: '', invoiceAddress: 'Sahil Yolu Cd. No:15 Muratpaşa/Antalya', fabricCode: 'S-200', mechanism: 'Motorlu', width: 180, height: 220, pileRatio: 1.0, status: 'DELIVERED', notes: 'Store perde', createdAt: '2026-02-20', deliveryDate: '2026-03-01', revisionCount: 0, parentOrderId: null, parts: 1 },
+    { id: 'ORD-1029', customerName: 'Ayşe Yılmaz', customerPhone: '0532 111 22 33', customerAddress: 'Bağdat Cad. No:42 Daire:5', customerCity: 'İstanbul / Kadıköy', invoiceName: 'Ayşe Yılmaz', invoiceTaxNo: '', invoiceAddress: 'Bağdat Cad. No:42 Kadıköy/İstanbul', fabricCode: 'K-900', mechanism: 'Motorlu', width: 320, height: 260, pileRatio: 2.5, status: 'SEWING', notes: 'Lazer kesim yapılacak', createdAt: '2026-03-01', deliveryDate: '2026-03-10', revisionCount: 0, parentOrderId: null, parts: 2, imageUrls: [] },
+    { id: 'ORD-1050', customerName: 'Mehmet Demir', customerPhone: '0533 444 55 66', customerAddress: 'Atatürk Bulvarı No:88', customerCity: 'Ankara / Çankaya', invoiceName: 'Demir Mobilya Ltd.', invoiceTaxNo: '1234567890', invoiceAddress: 'Atatürk Bulvarı No:88 Çankaya/Ankara', fabricCode: 'T-120', mechanism: 'Manuel', width: 200, height: 240, pileRatio: 2.0, status: 'QC', notes: '', createdAt: '2026-03-03', deliveryDate: '2026-03-12', revisionCount: 1, parentOrderId: 'ORD-1049', parts: 1, imageUrls: [] },
+    { id: 'ORD-1051', customerName: 'Fatma Kara', customerPhone: '0535 777 88 99', customerAddress: 'Cumhuriyet Mah. 123 Sok. No:7', customerCity: 'İzmir / Karşıyaka', invoiceName: 'Fatma Kara', invoiceTaxNo: '', invoiceAddress: 'Cumhuriyet Mah. 123 Sok. No:7 Karşıyaka/İzmir', fabricCode: 'K-900', mechanism: 'Raylı', width: 400, height: 300, pileRatio: 3.0, status: 'PENDING', notes: 'Salon fon perde + tül', createdAt: '2026-03-05', deliveryDate: '2026-03-15', revisionCount: 0, parentOrderId: null, parts: 3, imageUrls: [] },
+    { id: 'ORD-1052', customerName: 'Ali Öztürk', customerPhone: '0537 000 11 22', customerAddress: 'Sahil Yolu Cd. No:15', customerCity: 'Antalya / Muratpaşa', invoiceName: 'Ali Öztürk', invoiceTaxNo: '', invoiceAddress: 'Sahil Yolu Cd. No:15 Muratpaşa/Antalya', fabricCode: 'S-200', mechanism: 'Motorlu', width: 180, height: 220, pileRatio: 1.0, status: 'DELIVERED', notes: 'Store perde', createdAt: '2026-02-20', deliveryDate: '2026-03-01', revisionCount: 0, parentOrderId: null, parts: 1, imageUrls: [] },
 ];
 
 export default function Orders() {
     const navigate = useNavigate();
-    const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
     const [qrModalOrder, setQrModalOrder] = useState<Order | null>(null);
-    const [orderImages, setOrderImages] = useState<Record<string, string[]>>({});
 
     const [f, setF] = useState({
         customerName: '', customerPhone: '', customerAddress: '', customerCity: '',
@@ -64,25 +66,112 @@ export default function Orders() {
         notes: '', deliveryDate: '', parts: '1'
     });
 
-    const handleCreate = (e: React.FormEvent) => {
+    useEffect(() => {
+        fetchOrders();
+    }, []);
+
+    async function fetchOrders() {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Fetch error:', error);
+        } else {
+            // Map snake_case to camelCase
+            const mapped = (data || []).map((o: any) => ({
+                id: o.id,
+                customerName: o.customer_name,
+                customerPhone: o.customer_phone,
+                customerAddress: o.customer_address,
+                customerCity: o.customer_city,
+                invoiceName: o.invoice_name,
+                invoiceTaxNo: o.invoice_tax_no,
+                invoiceAddress: o.invoice_address,
+                fabricCode: o.fabric_code,
+                mechanism: o.mechanism,
+                width: o.width,
+                height: o.height,
+                pileRatio: o.pile_ratio,
+                status: o.status,
+                notes: o.notes,
+                createdAt: o.created_at,
+                deliveryDate: o.delivery_date,
+                revisionCount: o.revision_count,
+                parentOrderId: o.parent_order_id,
+                parts: o.parts,
+                imageUrls: o.image_urls || []
+            }));
+            setOrders(mapped);
+        }
+        setLoading(false);
+    }
+
+    const handleImageUpdate = async (orderId: string, newUrl: string) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        const updatedUrls = [...order.imageUrls, newUrl];
+
+        const { error } = await supabase
+            .from('orders')
+            .update({ image_urls: updatedUrls })
+            .eq('id', orderId);
+
+        if (error) {
+            alert('Resim kaydedilemedi: ' + error.message);
+        } else {
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, imageUrls: updatedUrls } : o));
+        }
+    };
+
+    const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        const newOrder: Order = {
-            id: `ORD-${Date.now().toString().slice(-4)}`,
-            customerName: f.customerName, customerPhone: f.customerPhone,
-            customerAddress: f.customerAddress, customerCity: f.customerCity,
-            invoiceName: f.invoiceName || f.customerName,
-            invoiceTaxNo: f.invoiceTaxNo, invoiceAddress: f.invoiceAddress || f.customerAddress,
-            fabricCode: f.fabricCode, mechanism: f.mechanism,
-            width: parseFloat(f.width), height: parseFloat(f.height),
-            pileRatio: parseFloat(f.pileRatio) || 2.0,
-            status: 'PENDING', notes: f.notes,
-            createdAt: new Date().toISOString().split('T')[0],
-            deliveryDate: f.deliveryDate, revisionCount: 0, parentOrderId: null,
+        const orderId = `ORD-${Date.now().toString().slice(-4)}`;
+
+        const newOrderObj = {
+            id: orderId,
+            customer_name: f.customerName,
+            customer_phone: f.customerPhone,
+            customer_address: f.customerAddress,
+            customer_city: f.customerCity,
+            invoice_name: f.invoiceName || f.customerName,
+            invoice_tax_no: f.invoiceTaxNo,
+            invoice_address: f.invoiceAddress || f.customerAddress,
+            fabric_code: f.fabricCode,
+            mechanism: f.mechanism,
+            width: parseFloat(f.width),
+            height: parseFloat(f.height),
+            pile_ratio: parseFloat(f.pileRatio) || 2.0,
+            status: 'PENDING',
+            notes: f.notes,
+            delivery_date: f.deliveryDate,
             parts: parseInt(f.parts) || 1
         };
-        setOrders([newOrder, ...orders]);
+
+        const { error } = await supabase.from('orders').insert([newOrderObj]);
+
+        if (error) {
+            alert('Hata: ' + error.message);
+            return;
+        }
+
+        await fetchOrders();
         setShowForm(false);
-        setQrModalOrder(newOrder); // QR modalı otomatik aç
+        // Map back for the modal
+        setQrModalOrder({
+            ...newOrderObj,
+            customerName: newOrderObj.customer_name,
+            fabricCode: newOrderObj.fabric_code,
+            mechanism: newOrderObj.mechanism,
+            width: newOrderObj.width,
+            height: newOrderObj.height,
+            deliveryDate: newOrderObj.delivery_date,
+            createdAt: new Date().toISOString()
+        } as any);
+
         setF({ customerName: '', customerPhone: '', customerAddress: '', customerCity: '', invoiceName: '', invoiceTaxNo: '', invoiceAddress: '', fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '', notes: '', deliveryDate: '', parts: '1' });
     };
 
@@ -183,7 +272,9 @@ export default function Orders() {
 
                 {/* Orders List */}
                 <div className="flex flex-col gap-4">
-                    {filteredOrders.map(order => (
+                    {loading ? (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Siparişler yükleniyor...</div>
+                    ) : filteredOrders.map(order => (
                         <div key={order.id} className="card" style={{ borderLeft: `4px solid ${STATUS_LABELS[order.status].color}` }}>
                             <div className="flex justify-between items-center" style={{ cursor: 'pointer' }} onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}>
                                 <div className="flex items-center gap-4">
@@ -271,13 +362,14 @@ export default function Orders() {
                                         </div>
                                     )}
 
-                                    {/* Biten İş Görseli */}
+                                    {/* Biten İş Görselleri */}
                                     {(order.status === 'READY' || order.status === 'DELIVERED' || order.status === 'IN_TRANSIT') && (
                                         <div style={{ marginTop: '1rem' }}>
                                             <ImageUploader
                                                 label="📸 Biten İş Görselleri (WebP)"
-                                                existingImages={orderImages[order.id] || []}
-                                                onImageSaved={(url) => setOrderImages(prev => ({ ...prev, [order.id]: [...(prev[order.id] || []), url] }))}
+                                                entityId={order.id}
+                                                existingImages={order.imageUrls}
+                                                onImageSaved={(url) => handleImageUpdate(order.id, url)}
                                             />
                                         </div>
                                     )}

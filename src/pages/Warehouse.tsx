@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, PackagePlus, AlertTriangle, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
+import { supabase } from '../lib/supabase';
 
-// Extended Mock veritabanı
-type Transaction = { date: string, type: 'IN' | 'OUT', amount: number, user: string, note: string };
-
+// DB tipleri
+type Transaction = { created_at: string, type: 'IN' | 'OUT', amount: number, user_id: string, note: string };
 type Material = {
     id: string;
     code: string;
@@ -17,45 +17,75 @@ type Material = {
     critical: number;
     location: string;
     supplier: string;
+    created_at: string;
+    inventory_transactions?: Transaction[];
     history: Transaction[];
+    imageUrls: string[];
 };
-
-const MOCK_MATERIALS: Material[] = [
-    {
-        id: 'MAT-001', code: 'K-900', type: 'Kumaş (Fon)', total: 50, current: 42.5, critical: 10, location: 'Raf A-12', supplier: 'Marmara Tekstil',
-        history: [
-            { date: '2026-03-01', type: 'IN', amount: 50, user: 'Admin', note: 'İlk Giriş' },
-            { date: '2026-03-04', type: 'OUT', amount: 7.5, user: 'Ahmet T.', note: 'Sipariş: ORD-1029' }
-        ]
-    },
-    {
-        id: 'MAT-002', code: 'T-120', type: 'Kumaş (Tül)', total: 100, current: 8.2, critical: 15, location: 'Raf B-05', supplier: 'Bursa Kumaşçılık',
-        history: [
-            { date: '2026-02-15', type: 'IN', amount: 100, user: 'Kabul', note: 'İrsaliye: 981273' },
-            { date: '2026-02-28', type: 'OUT', amount: 45, user: 'Mehmet', note: 'Sipariş: ORD-0991' },
-            { date: '2026-03-05', type: 'OUT', amount: 46.8, user: 'Ahmet T.', note: 'Sipariş: ORD-1050' }
-        ]
-    },
-    {
-        id: 'MAT-003', code: 'R-005', type: 'Aksesuar (Ray)', total: 200, current: 150, critical: 20, location: 'Kutu C-01', supplier: 'Metal İş',
-        history: [
-            { date: '2026-02-01', type: 'IN', amount: 200, user: 'Admin', note: 'Toplu alım' },
-            { date: '2026-03-02', type: 'OUT', amount: 50, user: 'Montaj Ekibi', note: 'Haftalık sarf' }
-        ]
-    },
-];
 
 export default function Warehouse() {
     const navigate = useNavigate();
-    const [materials, setMaterials] = useState<Material[]>(MOCK_MATERIALS);
+    const [materials, setMaterials] = useState<Material[]>([]);
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ALL' | 'KUMAŞ' | 'AKSESUAR'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        fetchMaterials();
+    }, []);
+
+    async function fetchMaterials() {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('materials')
+            .select('*, inventory_transactions(*) ')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Fetch error:', error);
+        } else {
+            const formatted = (data || []).map(m => ({
+                id: m.id,
+                code: m.code,
+                type: m.type,
+                total: m.total,
+                current: m.current,
+                critical: m.critical,
+                location: m.location,
+                supplier: m.supplier,
+                created_at: m.created_at,
+                imageUrls: m.image_urls || [],
+                history: (m.inventory_transactions || []).sort((a: any, b: any) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                )
+            }));
+            setMaterials(formatted);
+        }
+        setLoading(false);
+    }
+
+    const handleImageUpdate = async (materialId: string, newUrl: string) => {
+        const item = materials.find(m => m.id === materialId);
+        if (!item) return;
+
+        const updatedUrls = [...item.imageUrls, newUrl];
+
+        const { error } = await supabase
+            .from('materials')
+            .update({ image_urls: updatedUrls })
+            .eq('id', materialId);
+
+        if (error) {
+            alert('Resim kaydedilemedi: ' + error.message);
+        } else {
+            setMaterials(prev => prev.map(m => m.id === materialId ? { ...m, imageUrls: updatedUrls } : m));
+        }
+    };
 
     // Modals
     const [showAddForm, setShowAddForm] = useState(false);
     const [selectedMat, setSelectedMat] = useState<Material | null>(null);
     const [qrModalMat, setQrModalMat] = useState<Material | null>(null);
-    const [matImages, setMatImages] = useState<Record<string, string[]>>({});
 
     // Partial Add Form State
     const [newCode, setNewCode] = useState('');
@@ -69,29 +99,47 @@ export default function Warehouse() {
     const [updateAmount, setUpdateAmount] = useState('');
     const [updateNote, setUpdateNote] = useState('');
 
-    const handleAddMaterial = (e: React.FormEvent) => {
+    const handleAddMaterial = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newCode || !newTotal) return;
 
-        const newMaterial: Material = {
-            id: `MAT-NEW-${Date.now().toString().slice(-4)}`,
+        const matId = `MAT-${Date.now().toString().slice(-4)}`;
+        const totalVal = parseFloat(newTotal);
+
+        const newMaterial = {
+            id: matId,
             code: newCode,
             type: newType,
-            total: parseFloat(newTotal),
-            current: parseFloat(newTotal),
+            total: totalVal,
+            current: totalVal,
             critical: newType.includes('Kumaş') ? 10 : 20,
             location: newLocation || 'Belirtilmedi',
             supplier: newSupplier || 'Belirtilmedi',
-            history: [{ date: new Date().toISOString().split('T')[0], type: 'IN', amount: parseFloat(newTotal), user: 'Sistem', note: 'İlk Giriş' }]
         };
 
-        setMaterials([newMaterial, ...materials]);
+        const { error } = await supabase.from('materials').insert([newMaterial]);
+
+        if (error) {
+            alert('Hata: ' + error.message);
+            return;
+        }
+
+        // Add initial transaction
+        await supabase.from('inventory_transactions').insert([{
+            material_id: matId,
+            type: 'IN',
+            amount: totalVal,
+            note: 'İlk Giriş',
+            user_id: null
+        }]);
+
+        await fetchMaterials();
         setShowAddForm(false);
-        setQrModalMat(newMaterial);
+        setQrModalMat({ ...newMaterial, history: [] } as any);
         setNewCode(''); setNewTotal(''); setNewLocation(''); setNewSupplier('');
     };
 
-    const handleUpdateStock = (e: React.FormEvent) => {
+    const handleUpdateStock = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMat || !updateAmount || isNaN(Number(updateAmount))) return;
 
@@ -101,25 +149,29 @@ export default function Warehouse() {
             return;
         }
 
-        const updatedMaterials = materials.map(m => {
-            if (m.id === selectedMat.id) {
-                const newCurrent = updateType === 'IN' ? m.current + amountVal : m.current - amountVal;
-                const newTotal = updateType === 'IN' ? m.total + amountVal : m.total; // IN durumunda total de artsın
-                const newTx: Transaction = {
-                    date: new Date().toISOString().split('T')[0],
-                    type: updateType,
-                    amount: amountVal,
-                    user: localStorage.getItem('mock_role') || 'Sistem',
-                    note: updateNote || 'Manuel Güncelleme'
-                };
-                const updatedM = { ...m, current: newCurrent, total: newTotal, history: [newTx, ...m.history] };
-                setSelectedMat(updatedM); // Update modal view instantly
-                return updatedM;
-            }
-            return m;
-        });
+        const newCurrent = updateType === 'IN' ? selectedMat.current + amountVal : selectedMat.current - amountVal;
+        const newTotal = updateType === 'IN' ? selectedMat.total + amountVal : selectedMat.total;
 
-        setMaterials(updatedMaterials);
+        const { error: updateError } = await supabase
+            .from('materials')
+            .update({ current: newCurrent, total: newTotal })
+            .eq('id', selectedMat.id);
+
+        if (updateError) {
+            alert('Hata: ' + updateError.message);
+            return;
+        }
+
+        await supabase.from('inventory_transactions').insert([{
+            material_id: selectedMat.id,
+            type: updateType,
+            amount: amountVal,
+            note: updateNote || 'Manuel Güncelleme',
+            user_id: null
+        }]);
+
+        await fetchMaterials();
+        setSelectedMat(null);
         setUpdateAmount('');
         setUpdateNote('');
     };
@@ -141,6 +193,11 @@ export default function Warehouse() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
+                {loading && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999 }}>
+                        <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
+                    </div>
+                )}
 
                 <div className="flex justify-between items-center flex-wrap gap-4" style={{ marginBottom: '1.5rem' }}>
                     <div>
@@ -336,7 +393,7 @@ export default function Warehouse() {
                             <History size={18} /> Hareket Geçmişi (Logs)
                         </h3>
                         <div className="flex-col gap-2" style={{ flex: 1 }}>
-                            {selectedMat.history.map((tx, idx) => (
+                            {selectedMat.history.map((tx: Transaction, idx: number) => (
                                 <div key={idx} style={{
                                     padding: '1rem', borderBottom: '1px solid var(--border-color)',
                                     display: 'flex', alignItems: 'flex-start', gap: '1rem'
@@ -351,14 +408,14 @@ export default function Warehouse() {
                                     <div style={{ flex: 1 }}>
                                         <div className="flex justify-between">
                                             <span style={{ fontWeight: 600 }}>{tx.type === 'IN' ? '+' : '-'}{tx.amount} {selectedMat.type.includes('Kumaş') ? 'Metre' : 'Adet'}</span>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{tx.date}</span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(tx.created_at).toLocaleDateString('tr-TR')}</span>
                                         </div>
                                         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{tx.note}</p>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.25rem' }}>{tx.user} işlemi</p>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.25rem' }}>İşlem ID: {tx.user_id || 'Sistem'}</p>
                                     </div>
                                 </div>
                             ))}
-                            {selectedMat.history.length === 0 && (
+                            {(!selectedMat.history || selectedMat.history.length === 0) && (
                                 <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '2rem' }}>Henüz kayıt yok.</p>
                             )}
                         </div>
@@ -367,8 +424,9 @@ export default function Warehouse() {
                         <div style={{ marginTop: '1.5rem' }}>
                             <ImageUploader
                                 label="📸 Ürün / Rulo Görseli (WebP)"
-                                existingImages={matImages[selectedMat.id] || []}
-                                onImageSaved={(url) => setMatImages(prev => ({ ...prev, [selectedMat!.id]: [...(prev[selectedMat!.id] || []), url] }))}
+                                entityId={selectedMat.id}
+                                existingImages={selectedMat.imageUrls}
+                                onImageSaved={(url) => handleImageUpdate(selectedMat!.id, url)}
                             />
                         </div>
 
