@@ -4,7 +4,8 @@ import { Camera, ArrowLeft, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { db } from '../lib/db';
 import { compressToWebP, uploadToR2 } from '../lib/media';
-import { INITIAL_ORDERS, type Order } from './Orders';
+import { supabase } from '../lib/supabase';
+import { type Order } from './Orders';
 
 export default function QCPackagingStation() {
     const navigate = useNavigate();
@@ -17,9 +18,28 @@ export default function QCPackagingStation() {
     const [foundOrder, setFoundOrder] = useState<Order | null>(null);
     const [revisionId, setRevisionId] = useState<string | null>(null);
 
-    const lookupOrder = (id: string) => {
-        const order = INITIAL_ORDERS.find(o => o.id === id.trim());
-        setFoundOrder(order || null);
+    const lookupOrder = async (id: string) => {
+        const trimmedId = id.trim();
+        if (!trimmedId) {
+            setFoundOrder(null);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', trimmedId)
+            .single();
+
+        if (error || !data) {
+            setFoundOrder(null);
+        } else {
+            setFoundOrder({
+                ...data,
+                customerName: data.customer_name,
+                fabricCode: data.fabric_code
+            } as any);
+        }
     };
 
     const handleCaptureClick = () => {

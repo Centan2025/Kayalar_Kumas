@@ -5,7 +5,8 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
-import { INITIAL_ORDERS, type Order, type OrderStatus } from './Orders';
+import { supabase } from '../lib/supabase';
+import { type Order, type OrderStatus } from './Orders';
 
 const STATION_RULES: Record<string, { acceptStatus: OrderStatus; nextStatus: OrderStatus; label: string; requiredRole: string }> = {
     cut: { acceptStatus: 'PENDING', nextStatus: 'CUTTING', label: 'Kesim İstasyonu', requiredRole: 'CUTTER' },
@@ -124,54 +125,89 @@ export default function Scanner() {
             return;
         }
 
-        const order = INITIAL_ORDERS.find(o => o.id === trimmedId);
-
-        if (!order) {
-            setErrorMsg(`"${trimmedId}" ID'li sipariş bulunamadı!`);
-            setScanningStatus('error');
-            setFoundOrder(null);
-            setTimeout(() => setScanningStatus('idle'), 3000);
-            return;
-        }
-
-        if (stationRule && order.status !== stationRule.acceptStatus) {
-            const statusLabels: Record<string, string> = {
-                PENDING: 'Beklemede', CUTTING: 'Kesimde', SEWING: 'Dikimde',
-                QC: 'Kalite Kontrolde', READY: 'Hazır', IN_TRANSIT: 'Yolda', DELIVERED: 'Teslim Edildi'
-            };
-            setErrorMsg(`Bu sipariş şu an "${statusLabels[order.status]}" durumunda. ${stationRule.label} için "${statusLabels[stationRule.acceptStatus]}" durumunda olmalı!`);
-            setScanningStatus('wrong_station');
-            setFoundOrder(order);
-            setTimeout(() => setScanningStatus('idle'), 5000);
-            return;
-        }
-
-        setFoundOrder(order);
-
         try {
-            const isOnline = navigator.onLine;
-            const actionData = {
-                order_id: trimmedId,
-                station_id: `station_${stationId}`,
-                user_id: user?.id || 'unknown_user',
-                action_type: 'COMPLETED' as const,
-                created_at: new Date().toISOString(),
-                synced: false
-            };
+            const { data: order, error: fetchError } = await supabase
+                .from('orders')
+                .select('*')
+                .eq('id', trimmedId)
+                .single();
 
-            if (isOnline) {
-                await new Promise(res => setTimeout(res, 500));
-                actionData.synced = true;
+            if (fetchError || !order) {
+                setErrorMsg(`"${trimmedId}" ID'li sipariş bulunamadı!`);
+                setScanningStatus('error');
+                setFoundOrder(null);
+                setTimeout(() => setScanningStatus('idle'), 3000);
+                return;
             }
 
-            await db.offlineQueue.add(actionData);
-            setScanningStatus('success');
-            setScannedId('');
-            setTimeout(() => setScanningStatus('idle'), 4000);
+            // Map DB snake_case fields to camelCase as expected by the UI Order type
+            const mappedOrder: Order = {
+                id: order.id,
+                customerName: order.customer_name,
+                customerPhone: order.customer_phone,
+                customerAddress: order.customer_address,
+                customerCity: order.customer_city,
+                invoiceName: order.invoice_name,
+                invoiceTaxNo: order.invoice_tax_no,
+                invoiceAddress: order.invoice_address,
+                fabricCode: order.fabric_code,
+                mechanism: order.mechanism,
+                width: order.width,
+                height: order.height,
+                pileRatio: order.pile_ratio,
+                status: order.status,
+                notes: order.notes,
+                createdAt: order.created_at,
+                deliveryDate: order.delivery_date,
+                revisionCount: order.revision_count,
+                parentOrderId: order.parent_order_id,
+                parts: order.parts,
+                imageUrls: order.image_urls || []
+            };
+
+            if (stationRule && mappedOrder.status !== stationRule.acceptStatus) {
+                const statusLabels: Record<string, string> = {
+                    PENDING: 'Beklemede', CUTTING: 'Kesimde', SEWING: 'Dikimde',
+                    QC: 'Kalite Kontrolde', READY: 'Hazır', IN_TRANSIT: 'Yolda', DELIVERED: 'Teslim Edildi'
+                };
+                setErrorMsg(`Bu sipariş şu an "${statusLabels[mappedOrder.status]}" durumunda. ${stationRule.label} için "${statusLabels[stationRule.acceptStatus]}" durumunda olmalı!`);
+                setScanningStatus('wrong_station');
+                setFoundOrder(mappedOrder);
+                setTimeout(() => setScanningStatus('idle'), 5000);
+                return;
+            }
+
+            setFoundOrder(mappedOrder);
+
+            try {
+                const isOnline = navigator.onLine;
+                const actionData = {
+                    order_id: trimmedId,
+                    station_id: `station_${stationId}`,
+                    user_id: user?.id || 'unknown_user',
+                    action_type: 'COMPLETED' as const,
+                    created_at: new Date().toISOString(),
+                    synced: false
+                };
+
+                if (isOnline) {
+                    await new Promise(res => setTimeout(res, 500));
+                    actionData.synced = true;
+                }
+
+                await db.offlineQueue.add(actionData);
+                setScanningStatus('success');
+                setScannedId('');
+                setTimeout(() => setScanningStatus('idle'), 4000);
+            } catch (err) {
+                console.error(err);
+                setScanningStatus('error');
+                setErrorMsg('Bir hata oluştu. Tekrar deneyin.');
+            }
         } catch (err) {
             console.error(err);
             setScanningStatus('error');
-            setErrorMsg('Bir hata oluştu. Tekrar deneyin.');
+            setErrorMsg('Sipariş yüklenirken hata oluştu: ' + (err as any).message);
         }
     };
 
