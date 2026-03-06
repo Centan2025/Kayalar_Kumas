@@ -297,7 +297,13 @@ export default function Scanner() {
 
                 <style>{`
           @keyframes scan { 0% { top: 10%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 90%; opacity: 0; } }
-          #qr-reader video { border-radius: 16px !important; }
+          #qr-reader video { 
+              border-radius: 16px !important; 
+              width: 100% !important;
+              height: auto !important;
+              object-fit: cover !important;
+          }
+          #qr-reader img { display: none !important; }
           #qr-reader__scan_region { border-radius: 16px !important; }
           #qr-reader__dashboard { display: none !important; }
         `}</style>
