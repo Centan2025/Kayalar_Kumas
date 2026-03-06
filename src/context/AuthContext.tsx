@@ -28,10 +28,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     const loginBypass = (username: string = 'Cenk', roles: string[] = ['ADMIN']) => {
-        if (!localStorage.getItem('dev_admin_bypass')) {
-            console.log('Activating Dev Admin Bypass in AuthContext...');
-        }
         localStorage.setItem('dev_admin_bypass', 'true');
+        localStorage.setItem('dev_bypass_user', username);
+        localStorage.setItem('dev_bypass_roles', JSON.stringify(roles));
+
         setUser({ id: 'dev-admin-id', email: `${username.toLowerCase()}@system.local` } as User);
         setProfile({
             id: 'dev-admin-id',
@@ -44,7 +44,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const checkAuth = async () => {
             if (localStorage.getItem('dev_admin_bypass') === 'true') {
-                loginBypass();
+                const savedUser = localStorage.getItem('dev_bypass_user') || 'Cenk';
+                const savedRoles = JSON.parse(localStorage.getItem('dev_bypass_roles') || '["ADMIN"]');
+                loginBypass(savedUser, savedRoles);
                 return;
             }
 
@@ -63,6 +65,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
             if (event === 'SIGNED_OUT') {
                 localStorage.removeItem('dev_admin_bypass');
+                localStorage.removeItem('dev_bypass_user');
+                localStorage.removeItem('dev_bypass_roles');
                 setProfile(null);
                 setUser(null);
                 setSession(null);
@@ -112,6 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signOut = async () => {
         localStorage.removeItem('dev_admin_bypass');
+        localStorage.removeItem('dev_bypass_user');
+        localStorage.removeItem('dev_bypass_roles');
         await supabase.auth.signOut();
         setProfile(null);
         setUser(null);

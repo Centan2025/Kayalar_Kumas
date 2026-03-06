@@ -12,33 +12,51 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showQrScanner, setShowQrScanner] = useState(false);
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const [fetchingProfiles, setFetchingProfiles] = useState(false);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const fetchProfiles = async () => {
+            setFetchingProfiles(true);
+            try {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('full_name, roles')
+                    .order('full_name');
+                if (data) setProfiles(data);
+            } catch (err) {
+                console.error('Error fetching profiles:', err);
+            } finally {
+                setFetchingProfiles(false);
+            }
+        };
+        fetchProfiles();
+    }, []);
 
     useEffect(() => {
         let html5QrCode: Html5Qrcode | null = null;
         let timeoutId: NodeJS.Timeout;
 
         if (showQrScanner) {
-            // Add a small delay to ensure the DOM element is fully rendered before mounting the scanner
             timeoutId = setTimeout(() => {
                 const element = document.getElementById("qr-reader");
-                if (!element) return; // Component might have unmounted
+                if (!element) return;
 
                 html5QrCode = new Html5Qrcode("qr-reader");
                 html5QrCode.start(
-                    { facingMode: "environment" }, // Prefer back camera for mobile scanning
+                    { facingMode: "environment" },
                     {
                         fps: 10,
                         qrbox: { width: 250, height: 250 },
                         aspectRatio: 1.0,
-                        disableFlip: false
                     },
                     onScanSuccess,
                     onScanFailure
                 ).catch(err => {
                     if (err?.name !== 'AbortError') {
                         console.error("Camera start error:", err);
-                        setError("Kamera başlatılamadı. Lütfen tarayıcı izinlerini kontrol edin veya 'https' bağlantısı kullandığınızdan emin olun.");
+                        setError("Kamera başlatılamadı.");
                     }
                     setShowQrScanner(false);
                 });
@@ -48,7 +66,7 @@ export default function Login() {
         return () => {
             if (timeoutId) clearTimeout(timeoutId);
             if (html5QrCode?.isScanning) {
-                html5QrCode.stop().catch(e => console.log("QR Stop error ignored:", e));
+                html5QrCode.stop().catch(() => { });
             }
         };
     }, [showQrScanner]);
@@ -56,10 +74,6 @@ export default function Login() {
     const onScanSuccess = async (decodedText: string) => {
         setLoading(true);
         setError(null);
-
-        // Remove manual DOM manipulation for scanner stop here.
-        // We let the useEffect cleanup handle the scanner stop properly when showQrScanner becomes false.
-
         try {
             const { data, error: fetchError } = await supabase
                 .from('profiles')
@@ -67,13 +81,9 @@ export default function Login() {
                 .eq('qr_token', decodedText)
                 .single();
 
-            if (fetchError || !data) {
-                throw new Error("Geçersiz QR Kod. Lütfen sistem yöneticisiyle görüşün.");
-            }
+            if (fetchError || !data) throw new Error("Geçersiz QR Kod.");
 
-            // QR Login Success
-            console.log('QR Login Success for:', data.full_name);
-            setShowQrScanner(false); // This triggers the cleanup
+            setShowQrScanner(false);
             loginBypass(data.full_name, data.roles || []);
             navigate('/dashboard');
         } catch (err: any) {
@@ -84,16 +94,13 @@ export default function Login() {
         }
     };
 
-    const onScanFailure = () => {
-        // Just ignore failures during scan
-    };
+    const onScanFailure = () => { };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
-        // DEV OVERRIDE: cenk / 1
         if (username.toLowerCase() === 'cenk' && password === '1') {
             loginBypass('Cenk', ['ADMIN']);
             navigate('/dashboard');
@@ -113,9 +120,19 @@ export default function Login() {
                 navigate('/dashboard');
             }
         } catch (err: any) {
-            setError(err.message || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
+            setError(err.message || 'Giriş yapılamadı.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleQuickLogin = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const val = e.target.value;
+        if (!val) return;
+        const profile = profiles.find(p => p.full_name === val);
+        if (profile) {
+            loginBypass(profile.full_name, profile.roles || []);
+            navigate('/dashboard');
         }
     };
 
@@ -138,83 +155,92 @@ export default function Login() {
                 )}
 
                 {!showQrScanner ? (
-                    <form onSubmit={handleLogin} className="flex flex-col gap-4">
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Kullanıcı Adı</label>
-                            <div style={{ position: 'relative' }}>
-                                <UserIcon size={18} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <div className="flex flex-col gap-6">
+                        <div style={{ padding: '1rem', borderRadius: '12px', background: 'rgba(79, 70, 229, 0.1)', border: '1px solid rgba(79, 70, 229, 0.2)' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 600 }}>
+                                🛠️ Test Girişi (Hızlı Seçim)
+                            </label>
+                            <select
+                                className="input"
+                                onChange={handleQuickLogin}
+                                defaultValue=""
+                                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                            >
+                                <option value="" disabled>{fetchingProfiles ? 'Yükleniyor...' : 'Kullanıcı Seçin'}</option>
+                                {profiles.map((p, idx) => (
+                                    <option key={idx} value={p.full_name} style={{ color: '#000' }}>
+                                        {p.full_name} ({Array.isArray(p.roles) ? p.roles.join(', ') : (p.roles || 'Yetkisiz')})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>VEYA FORM İLE</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.05)' }}></div>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Kullanıcı Adı</label>
+                                <div style={{ position: 'relative' }}>
+                                    <UserIcon size={18} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        style={{ paddingLeft: '2.5rem' }}
+                                        required
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        placeholder="cenk"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Şifre</label>
                                 <input
-                                    type="text"
+                                    type="password"
                                     className="input"
-                                    style={{ paddingLeft: '2.5rem' }}
                                     required
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    placeholder="Örn: cenk"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
                                 />
                             </div>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Şifre</label>
-                            <input
-                                type="password"
-                                className="input"
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                            />
-                        </div>
 
-                        <div className="flex flex-col gap-3" style={{ marginTop: '0.5rem' }}>
-                            <button type="submit" className="button w-full" disabled={loading}>
-                                {loading ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />}
-                                {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
-                            </button>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '0.5rem 0' }}>
-                                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>VEYA</span>
-                                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
+                            <div className="flex flex-col gap-3" style={{ marginTop: '0.5rem' }}>
+                                <button type="submit" className="button w-full" disabled={loading}>
+                                    {loading ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />}
+                                    {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowQrScanner(true)}
+                                    className="button button-outline w-full"
+                                    style={{ color: 'var(--success)', borderColor: 'var(--success)' }}
+                                >
+                                    <QrCode size={20} /> QR Kod ile Giriş
+                                </button>
                             </div>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowQrScanner(true)}
-                                className="button button-outline w-full"
-                                style={{ color: 'var(--success)', borderColor: 'var(--success)' }}
-                            >
-                                <QrCode size={20} /> QR Kod ile Giriş
-                            </button>
-                        </div>
-
-                        <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
-                            Dev Modu Aktif: <strong>cenk / 1</strong>
-                        </p>
-                    </form>
+                        </form>
+                    </div>
                 ) : (
                     <div className="animate-fade-in" style={{ padding: '1rem', textAlign: 'center' }}>
                         <div id="qr-reader" style={{ overflow: 'hidden', borderRadius: '12px', marginBottom: '1.5rem', border: '2px solid var(--success)', width: '100%', minHeight: '300px', backgroundColor: '#000' }}></div>
-                        <p style={{ marginBottom: '1.5rem', fontSize: '0.875rem' }}>Personel kartınızdaki QR kodu kameraya yaklaştırın.</p>
                         <button
                             onClick={() => setShowQrScanner(false)}
                             className="button button-outline w-full"
                         >
                             <X size={20} /> İptal et
                         </button>
-                        <style>{`
-                            #qr-reader video {
-                                width: 100% !important;
-                                height: auto !important;
-                                object-fit: cover !important;
-                            }
-                            #qr-reader img {
-                                display: none !important;
-                            }
-                        `}</style>
                     </div>
                 )}
             </div>
+            <style>{`
+                #qr-reader video { width: 100% !important; height: auto !important; object-fit: cover !important; }
+                #qr-reader img { display: none !important; }
+            `}</style>
         </div>
     );
 }

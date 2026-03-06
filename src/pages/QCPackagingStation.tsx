@@ -1,14 +1,17 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ArrowLeft, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw } from 'lucide-react';
+import { Camera, ArrowLeft, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw, QrCode as QrIcon, CameraOff } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { db } from '../lib/db';
+import { useAuth } from '../context/AuthContext';
 import { compressToWebP, uploadToR2 } from '../lib/media';
 import { supabase } from '../lib/supabase';
 import { type Order } from './Orders';
 
 export default function QCPackagingStation() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [orderId, setOrderId] = useState('');
@@ -17,6 +20,8 @@ export default function QCPackagingStation() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [foundOrder, setFoundOrder] = useState<Order | null>(null);
     const [revisionId, setRevisionId] = useState<string | null>(null);
+    const [showScanner, setShowScanner] = useState(false);
+    const scannerRef = useRef<Html5Qrcode | null>(null);
 
     const lookupOrder = async (id: string) => {
         const trimmedId = id.trim();
@@ -40,6 +45,43 @@ export default function QCPackagingStation() {
                 fabricCode: data.fabric_code
             } as any);
         }
+    };
+
+    const startScanner = async () => {
+        setQcStatus('idle');
+        setOrderId('');
+        setFoundOrder(null);
+        setShowScanner(true);
+
+        setTimeout(async () => {
+            try {
+                const scanner = new Html5Qrcode("qc-qr-reader");
+                scannerRef.current = scanner;
+                await scanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText) => {
+                        setOrderId(decodedText);
+                        lookupOrder(decodedText);
+                        stopScanner();
+                    },
+                    () => { }
+                );
+            } catch (err) {
+                console.error("Scanner error:", err);
+                setShowScanner(false);
+            }
+        }, 100);
+    };
+
+    const stopScanner = async () => {
+        if (scannerRef.current) {
+            try {
+                await scannerRef.current.stop();
+            } catch (e) { }
+            scannerRef.current = null;
+        }
+        setShowScanner(false);
     };
 
     const handleCaptureClick = () => {
@@ -71,12 +113,23 @@ export default function QCPackagingStation() {
             const actionData = {
                 order_id: orderId,
                 station_id: 'station_qc',
-                user_id: localStorage.getItem('mock_token') || 'unknown_user',
+                user_id: user?.id || 'unknown_user',
                 action_type: 'PHOTO_UPLOADED' as const,
                 photo_url: uploadedUrl,
                 created_at: new Date().toISOString(),
-                synced: navigator.onLine
+                synced: false
             };
+
+            // 2.5 Supabase durum güncellemesi
+            if (navigator.onLine) {
+                const { error: updateError } = await supabase
+                    .from('orders')
+                    .update({ status: 'READY' })
+                    .eq('id', orderId);
+
+                if (updateError) throw updateError;
+                actionData.synced = true;
+            }
 
             await db.offlineQueue.add(actionData);
             setQcStatus('success');
@@ -95,7 +148,7 @@ export default function QCPackagingStation() {
         const actionData = {
             order_id: orderId,
             station_id: 'station_qc',
-            user_id: localStorage.getItem('mock_token') || 'unknown_user',
+            user_id: user?.id || 'unknown_user',
             action_type: 'REJECTED' as const,
             created_at: new Date().toISOString(),
             synced: navigator.onLine
@@ -110,7 +163,7 @@ export default function QCPackagingStation() {
         const revisionAction = {
             order_id: newRevId,
             station_id: 'station_qc',
-            user_id: localStorage.getItem('mock_token') || 'unknown_user',
+            user_id: user?.id || 'unknown_user',
             action_type: 'REVISION_CREATED' as const,
             created_at: new Date().toISOString(),
             synced: navigator.onLine
@@ -147,15 +200,36 @@ export default function QCPackagingStation() {
                 </div>
 
                 <div className="card flex flex-col gap-6">
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Sipariş / Kumaş ID</label>
-                        <input
-                            type="text" className="input" value={orderId}
-                            onChange={(e) => { setOrderId(e.target.value); lookupOrder(e.target.value); }}
-                            placeholder="QR'dan okunan Sipariş ID..."
+                    <div className="flex gap-2">
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Sipariş / Kumaş ID</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text" className="input" value={orderId}
+                                    onChange={(e) => { setOrderId(e.target.value); lookupOrder(e.target.value); }}
+                                    placeholder="ID girin veya okutun..."
+                                    disabled={uploading || qcStatus !== 'idle'}
+                                />
+                            </div>
+                        </div>
+                        <button
+                            onClick={showScanner ? stopScanner : startScanner}
+                            className={`button ${showScanner ? 'button-outline' : ''}`}
+                            style={{ alignSelf: 'flex-end', height: '42px', padding: '0 1rem' }}
                             disabled={uploading || qcStatus !== 'idle'}
-                        />
+                        >
+                            {showScanner ? <CameraOff size={20} /> : <QrIcon size={20} />}
+                        </button>
                     </div>
+
+                    {showScanner && (
+                        <div className="animate-fade-in" style={{ position: 'relative' }}>
+                            <div id="qc-qr-reader" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', border: '2px solid var(--primary)', backgroundColor: '#000' }}></div>
+                            <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                                Sipariş QR kodunu kameraya gösterin.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Sipariş Detay Kartı */}
                     {foundOrder && qcStatus === 'idle' && (
@@ -226,6 +300,14 @@ export default function QCPackagingStation() {
                     )}
                 </div>
             </main>
+            <style>{`
+                #qc-qr-reader video {
+                    width: 100% !important;
+                    height: auto !important;
+                    object-fit: cover !important;
+                }
+                #qc-qr-reader img { display: none !important; }
+            `}</style>
         </div>
     );
 }

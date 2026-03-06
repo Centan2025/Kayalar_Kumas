@@ -191,6 +191,14 @@ export default function Scanner() {
                 };
 
                 if (isOnline) {
+                    // Update Supabase directly if online
+                    const { error: updateError } = await supabase
+                        .from('orders')
+                        .update({ status: stationRule.nextStatus })
+                        .eq('id', trimmedId);
+
+                    if (updateError) throw updateError;
+
                     await new Promise(res => setTimeout(res, 500));
                     actionData.synced = true;
                 }
@@ -202,7 +210,7 @@ export default function Scanner() {
             } catch (err) {
                 console.error(err);
                 setScanningStatus('error');
-                setErrorMsg('Bir hata oluştu. Tekrar deneyin.');
+                setErrorMsg('Durum güncellenemedi: ' + (err as any).message);
             }
         } catch (err) {
             console.error(err);
