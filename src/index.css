@@ -434,3 +434,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
 }
+
+@media (max-width: 640px) {
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  
+  .app-header > div {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .container {
+    padding: 1rem;
+  }
+}

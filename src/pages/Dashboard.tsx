@@ -14,6 +14,15 @@ const CARDS = [
 
 import { useAuth } from '../context/AuthContext';
 
+const ROLE_LABELS: Record<string, string> = {
+    'ADMIN': 'Yönetici',
+    'CUTTER': 'Kesimhane',
+    'TAILOR': 'Dikimhane',
+    'QC': 'Kalite Kontrol',
+    'PACKAGER': 'Paketleme',
+    'LOGISTICS': 'Sevkiyat'
+};
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const { profile, signOut } = useAuth();
@@ -49,15 +58,19 @@ export default function Dashboard() {
                         <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>Hoş geldin, {userName}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 no-print" style={{ backgroundColor: 'var(--bg-color)', padding: '0.4rem 0.8rem', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '0.75rem' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                        <span style={{ color: 'var(--text-muted)' }}>{roles.join(', ')}</span>
+                <div className="flex items-center gap-2 sm:gap-4" style={{ justifyContent: 'flex-end', width: '100%', flexWrap: 'wrap' }}>
+                    <div className="flex items-center gap-2 no-print" style={{ backgroundColor: 'var(--bg-color)', padding: '0.4rem 0.8rem', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '0.7rem' }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                            {roles.map(r => ROLE_LABELS[r] || r).join(', ')}
+                        </span>
                     </div>
-                    <OfflineSyncBadge />
-                    <button onClick={handleLogout} className="button button-outline" style={{ padding: '0.5rem', borderRadius: '50%' }}>
-                        <LogOut size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <OfflineSyncBadge />
+                        <button onClick={handleLogout} className="button button-outline" style={{ padding: '0.5rem', borderRadius: '50%', width: '36px', height: '36px' }}>
+                            <LogOut size={16} />
+                        </button>
+                    </div>
                 </div>
             </header>
 
