@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, AlertTriangle, TrendingUp, Users, Package, BarChart3, Activity, Calendar } from 'lucide-react';
+import { Clock, AlertTriangle, TrendingUp, Users, Package, BarChart3, Activity, Calendar } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/LoadingScreen';
@@ -62,7 +61,6 @@ function BarChart({ data, labelKey, valueKey, color, unit, maxVal }: {
 }
 
 export default function Reports() {
-    const navigate = useNavigate();
     const [chartTab, setChartTab] = useState<ChartTab>('daily');
     const [data, setData] = useState({
         dailyStats: [] as DailyStat[],

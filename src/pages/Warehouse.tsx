@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List } from 'lucide-react';
+import { PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import BackButton from '../components/BackButton';
 import QRPrintModal from '../components/QRPrintModal';
@@ -27,7 +26,6 @@ type Material = {
 };
 
 export default function Warehouse() {
-    const navigate = useNavigate();
     const [materials, setMaterials] = useState<Material[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ALL' | 'KUMAŞ' | 'AKSESUAR'>('ALL');

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, Shield, User, Trash2, Key, QrCode, Printer, Check, X, Edit2, Save, LayoutGrid, List, Search } from 'lucide-react';
+import { UserPlus, Shield, User, Trash2, Key, QrCode, Printer, Check, X, Edit2, Save, LayoutGrid, List, Search } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import BackButton from '../components/BackButton';
@@ -30,7 +29,6 @@ const ROLE_MAP: Record<string, string> = {
 };
 
 export default function Users() {
-    const navigate = useNavigate();
     const { profile: currentUserProfile } = useAuth();
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

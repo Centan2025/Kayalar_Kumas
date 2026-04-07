@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Truck, CheckCircle, XCircle, QrCode, AlertTriangle } from 'lucide-react';
+import { Truck, CheckCircle, XCircle, QrCode, AlertTriangle } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +35,6 @@ const MOCK_SHIPMENTS: Shipment[] = [
 ];
 
 export default function Packaging() {
-    const navigate = useNavigate();
     const { profile } = useAuth();
     const [shipments, setShipments] = useState<Shipment[]>(MOCK_SHIPMENTS);
     const [scanInput, setScanInput] = useState('');

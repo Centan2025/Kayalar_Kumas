@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, QrCode, CheckCircle, Database, AlertTriangle, Camera, CameraOff } from 'lucide-react';
+import { QrCode, CheckCircle, Database, AlertTriangle, Camera, CameraOff } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '../lib/db';

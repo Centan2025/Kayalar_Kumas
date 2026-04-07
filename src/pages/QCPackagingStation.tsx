@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Camera, ArrowLeft, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw, QrCode as QrIcon, CameraOff } from 'lucide-react';
+import { Camera, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw, QrCode as QrIcon, CameraOff } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import { Html5Qrcode } from 'html5-qrcode';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
@@ -11,7 +10,6 @@ import { supabase } from '../lib/supabase';
 import { type Order } from './Orders';
 
 export default function QCPackagingStation() {
-    const navigate = useNavigate();
     const { user, profile } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
 

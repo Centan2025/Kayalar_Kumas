@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, QrCode, X, LayoutGrid, List, Search, Clock, MapPin, Phone, FileText, Users, Package } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import BackButton from '../components/BackButton';
@@ -46,7 +45,6 @@ export type Order = {
 };
 
 export default function Orders() {
-    const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
