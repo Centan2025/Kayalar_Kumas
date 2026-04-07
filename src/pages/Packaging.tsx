@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Truck, CheckCircle, XCircle, QrCode, AlertTriangle } from 'lucide-react';
+import BackButton from '../components/BackButton';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { useAuth } from '../context/AuthContext';
 
@@ -94,9 +95,7 @@ export default function Packaging() {
         <div style={{ paddingBottom: '3rem' }}>
             <header className="app-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <ArrowLeft size={20} /> Geri
-                    </button>
+                    <BackButton path="/dashboard" />
                     {profile && (
                         <>
                             <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>

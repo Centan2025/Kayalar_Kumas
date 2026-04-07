@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, ArrowLeft, CheckCircle, Upload, XCircle, AlertCircle, RotateCcw, QrCode as QrIcon, CameraOff } from 'lucide-react';
+import BackButton from '../components/BackButton';
 import { Html5Qrcode } from 'html5-qrcode';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import { db } from '../lib/db';
@@ -186,9 +187,7 @@ export default function QCPackagingStation() {
         <div>
             <header className="app-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <ArrowLeft size={20} /> Geri
-                    </button>
+                    <BackButton path="/dashboard" />
                     <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
+import BackButton from '../components/BackButton';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
 import CustomDatePicker from '../components/CustomDatePicker';
@@ -230,10 +231,7 @@ export default function Warehouse() {
     return (
         <div style={{ paddingBottom: '3rem' }}>
             <header className="app-header">
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ArrowLeft size={20} />
-                    Geri
-                </button>
+                <BackButton path="/dashboard" />
                 <OfflineSyncBadge />
             </header>
 

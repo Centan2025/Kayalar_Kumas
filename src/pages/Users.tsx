@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, UserPlus, Shield, User, Trash2, Key, QrCode, Printer, Check, X, Edit2, Save, LayoutGrid, List, Search } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
+import BackButton from '../components/BackButton';
 import ImageUploader from '../components/ImageUploader';
 import { useAuth } from '../context/AuthContext';
 import LoadingScreen from '../components/LoadingScreen';
@@ -214,9 +215,7 @@ export default function Users() {
     return (
         <div style={{ paddingBottom: '3rem' }}>
             <header className="app-header no-print">
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ArrowLeft size={20} /> Geri
-                </button>
+                <BackButton path="/dashboard" />
                 <OfflineSyncBadge />
             </header>
 

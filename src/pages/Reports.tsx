@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, AlertTriangle, TrendingUp, Users, Package, BarChart3, Activity, Calendar } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
+import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 
@@ -180,9 +181,7 @@ export default function Reports() {
     return (
         <div style={{ paddingBottom: '3rem' }}>
             <header className="app-header">
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ArrowLeft size={20} /> Geri
-                </button>
+                <BackButton path="/dashboard" />
                 <OfflineSyncBadge />
             </header>
 

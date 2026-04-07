@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, QrCode, CheckCircle, Database, AlertTriangle, Camera, CameraOff } from 'lucide-react';
+import BackButton from '../components/BackButton';
 import { Html5Qrcode } from 'html5-qrcode';
 import { db } from '../lib/db';
 import { useAuth } from '../context/AuthContext';
@@ -228,9 +229,7 @@ export default function Scanner() {
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#000', color: 'white' }}>
             <header className="app-header" style={{ backgroundColor: 'rgba(0,0,0,0.8)', borderBottom: '1px solid #333', backdropFilter: 'blur(10px)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button onClick={() => { stopCamera(); navigate('/dashboard'); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <ArrowLeft size={18} /> Geri
-                    </button>
+                    <BackButton onClick={stopCamera} path="/dashboard" variant="white" />
                     <div style={{ height: '24px', width: '1px', backgroundColor: '#333' }}></div>
                     <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
