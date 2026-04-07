@@ -231,9 +231,13 @@ export default function Scanner() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <BackButton onClick={stopCamera} path="/dashboard" variant="white" />
                     <div style={{ height: '24px', width: '1px', backgroundColor: '#333' }}></div>
-                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                         {profile?.full_name || 'Operatör'}
+                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                         {profile?.avatar_url ? (
+                             <img src={profile.avatar_url} alt="profile" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #444' }} />
+                         ) : (
+                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                         )}
+                         <span style={{ fontWeight: 500 }}>{profile?.full_name || 'Operatör'}</span>
                     </div>
                 </div>
                 <OfflineSyncBadge />

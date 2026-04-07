@@ -97,9 +97,13 @@ export default function Packaging() {
                     {profile && (
                         <>
                             <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
-                                 {profile.full_name}
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                 {profile.avatar_url ? (
+                                     <img src={profile.avatar_url} alt="profile" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)' }} />
+                                 ) : (
+                                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                                 )}
+                                 <span style={{ fontWeight: 500 }}>{profile.full_name}</span>
                             </div>
                         </>
                     )}

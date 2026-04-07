@@ -84,7 +84,7 @@ export default function Login() {
             if (fetchError || !data) throw new Error("Geçersiz QR Kod.");
 
             setShowQrScanner(false);
-            loginBypass(data.full_name, data.roles || []);
+            loginBypass(data.full_name, data.roles || [], data.avatar_url);
             navigate('/dashboard');
         } catch (err: any) {
             setError(err.message);

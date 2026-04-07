@@ -52,7 +52,15 @@ export default function Dashboard() {
         <div>
             <header className="app-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #1e40af, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', boxShadow: '0 4px 12px rgba(30,64,175,0.2)' }}>🏠</div>
+                    {profile?.avatar_url ? (
+                        <img 
+                            src={profile.avatar_url} 
+                            alt={userName} 
+                            style={{ width: '40px', height: '40px', borderRadius: '12px', objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                        />
+                    ) : (
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #1e40af, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', boxShadow: '0 4px 12px rgba(30,64,175,0.2)' }}>🏠</div>
+                    )}
                     <div>
                         <h1 style={{ fontSize: '1.1rem', margin: 0 }}>Kayalar Kumaş</h1>
                         <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>Hoş geldin, {userName}</span>

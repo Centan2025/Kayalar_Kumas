@@ -8,6 +8,7 @@ export type Profile = {
     id: string;
     full_name: string;
     roles: string[]; // Array for multiple roles
+    avatar_url?: string;
 };
 
 type AuthContextType = {
@@ -16,7 +17,7 @@ type AuthContextType = {
     profile: Profile | null;
     loading: boolean;
     signOut: () => Promise<void>;
-    loginBypass: (username?: string, roles?: string[]) => void;
+    loginBypass: (username?: string, roles?: string[], avatar_url?: string) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,16 +28,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [profile, setProfile] = useState<Profile | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const loginBypass = (username: string = 'Cenk', roles: string[] = ['ADMIN']) => {
+    const loginBypass = (username: string = 'Cenk', roles: string[] = ['ADMIN'], avatar?: string) => {
         localStorage.setItem('dev_admin_bypass', 'true');
         localStorage.setItem('dev_bypass_user', username);
         localStorage.setItem('dev_bypass_roles', JSON.stringify(roles));
+        if (avatar) localStorage.setItem('dev_bypass_avatar', avatar);
 
         setUser({ id: 'dev-admin-id', email: `${username.toLowerCase()}@system.local` } as User);
         setProfile({
             id: 'dev-admin-id',
-            full_name: `${username} (Bypass)`,
-            roles: roles
+            full_name: `${username}`,
+            roles: roles,
+            avatar_url: avatar
         });
         setLoading(false);
     };
@@ -46,7 +49,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (localStorage.getItem('dev_admin_bypass') === 'true') {
                 const savedUser = localStorage.getItem('dev_bypass_user') || 'Cenk';
                 const savedRoles = JSON.parse(localStorage.getItem('dev_bypass_roles') || '["ADMIN"]');
-                loginBypass(savedUser, savedRoles);
+                const savedAvatar = localStorage.getItem('dev_bypass_avatar') || undefined;
+                loginBypass(savedUser, savedRoles, savedAvatar);
                 return;
             }
 
@@ -67,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 localStorage.removeItem('dev_admin_bypass');
                 localStorage.removeItem('dev_bypass_user');
                 localStorage.removeItem('dev_bypass_roles');
+                localStorage.removeItem('dev_bypass_avatar');
                 setProfile(null);
                 setUser(null);
                 setSession(null);
