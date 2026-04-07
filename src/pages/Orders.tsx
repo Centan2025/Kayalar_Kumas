@@ -147,7 +147,7 @@ export default function Orders() {
             }
             return prev.map(o => o.id === orderId ? { ...o, imageUrls: latestUrls } : o);
         });
-        const { error } = await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
+        await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
     };
 
     const handleImageRemove = async (orderId: string, urlToRemove: string) => {
@@ -157,7 +157,7 @@ export default function Orders() {
             if (order) latestUrls = order.imageUrls.filter(u => u !== urlToRemove);
             return prev.map(o => o.id === orderId ? { ...o, imageUrls: latestUrls } : o);
         });
-        const { error } = await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
+        await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
     };
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -399,8 +399,9 @@ export default function Orders() {
                         <div className="flex gap-6 flex-wrap" style={{ fontSize: '0.85rem', padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '12px', width: '100%' }}>
                             <div className="flex items-center gap-2"><Phone size={14} color="var(--text-muted)" /> <strong>{selectedGroup.customerPhone || '-'}</strong></div>
                             <div className="flex items-center gap-2"><MapPin size={14} color="var(--text-muted)" /> <strong>{selectedGroup.customerCity || '-'}</strong></div>
+                            <div className="flex items-center gap-2"><FileText size={14} color="var(--primary)" /> Kayıt: <strong>{new Date(selectedGroup.createdAt).toLocaleDateString('tr-TR')}</strong></div>
                             <div className="flex items-center gap-2"><Clock size={14} color="var(--danger)" /> Termin: <strong>{new Date(selectedGroup.deliveryDate).toLocaleDateString('tr-TR')}</strong></div>
-                            <div className="flex items-center gap-2"><Users size={14} color="var(--primary)" /> <strong>{selectedGroup.customerName}</strong></div>
+                            <div className="flex items-center gap-2"><Users size={14} color="var(--primary)" /> Müşteri: <strong>{selectedGroup.customerName}</strong></div>
                         </div>
                     </header>
                     
