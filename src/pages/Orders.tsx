@@ -5,6 +5,7 @@ import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
 import CustomDatePicker from '../components/CustomDatePicker';
+import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 
 export type OrderStatus = 'PENDING' | 'CUTTING' | 'SEWING' | 'QC' | 'READY' | 'IN_TRANSIT' | 'DELIVERED';
@@ -244,6 +245,7 @@ export default function Orders() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
+                {loading && <LoadingScreen fullScreen message="Siparişler yükleniyor..." />}
                 <div className="flex justify-between items-center" style={{ marginBottom: '2rem' }}>
                     <h2>Siparişler</h2>
                     <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, AlertTriangle, TrendingUp, Users, Package, BarChart3, Activity, Calendar } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
+import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 
 // ---------- MOCK DATA ----------
@@ -186,11 +187,7 @@ export default function Reports() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
-                {loading && (
-                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999 }}>
-                        <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
-                    </div>
-                )}
+                {loading && <LoadingScreen fullScreen message="Raporlar hazırlanıyor..." />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                     <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, #1e40af, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>🏠</div>
                     <div>

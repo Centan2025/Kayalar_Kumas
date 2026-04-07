@@ -5,6 +5,7 @@ import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
 import CustomDatePicker from '../components/CustomDatePicker';
+import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 
 // DB tipleri
@@ -237,11 +238,7 @@ export default function Warehouse() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
-                {loading && (
-                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999 }}>
-                        <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
-                    </div>
-                )}
+                {loading && <LoadingScreen fullScreen message="Stok bilgileri yükleniyor..." />}
 
                 <div className="flex justify-between items-center flex-wrap gap-4" style={{ marginBottom: '1.5rem' }}>
                     <div>

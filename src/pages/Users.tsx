@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import ImageUploader from '../components/ImageUploader';
 import { useAuth } from '../context/AuthContext';
+import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
 
 
@@ -220,6 +221,7 @@ export default function Users() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
+                {loading && <LoadingScreen fullScreen message="Personeller yükleniyor..." />}
                 <div className="flex justify-between items-center no-print" style={{ marginBottom: '2rem' }}>
                     <div>
                         <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
