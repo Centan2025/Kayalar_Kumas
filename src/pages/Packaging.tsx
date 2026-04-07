@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Truck, CheckCircle, XCircle, QrCode, AlertTriangle } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
+import { useAuth } from '../context/AuthContext';
 
 type PackageItem = { orderId: string; scanned: boolean; label: string };
 
@@ -35,6 +36,7 @@ const MOCK_SHIPMENTS: Shipment[] = [
 
 export default function Packaging() {
     const navigate = useNavigate();
+    const { profile } = useAuth();
     const [shipments, setShipments] = useState<Shipment[]>(MOCK_SHIPMENTS);
     const [scanInput, setScanInput] = useState('');
     const [activeShipment, setActiveShipment] = useState<string | null>(null);
@@ -91,9 +93,20 @@ export default function Packaging() {
     return (
         <div style={{ paddingBottom: '3rem' }}>
             <header className="app-header">
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ArrowLeft size={20} /> Geri
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <ArrowLeft size={20} /> Geri
+                    </button>
+                    {profile && (
+                        <>
+                            <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                                 {profile.full_name}
+                            </div>
+                        </>
+                    )}
+                </div>
                 <OfflineSyncBadge />
             </header>
 

@@ -42,11 +42,18 @@ export default function Dashboard() {
     return (
         <div>
             <header className="app-header">
-                <div>
-                    <h1 style={{ fontSize: '1.1rem', margin: 0 }}>🏠 Kayalar Kumaş</h1>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ev ve Otel Tekstili — {userName} ({roles.join(', ')})</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #1e40af, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', boxShadow: '0 4px 12px rgba(30,64,175,0.2)' }}>🏠</div>
+                    <div>
+                        <h1 style={{ fontSize: '1.1rem', margin: 0 }}>Kayalar Kumaş</h1>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>Hoş geldin, {userName}</span>
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 no-print" style={{ backgroundColor: 'var(--bg-color)', padding: '0.4rem 0.8rem', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '0.75rem' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                        <span style={{ color: 'var(--text-muted)' }}>{roles.join(', ')}</span>
+                    </div>
                     <OfflineSyncBadge />
                     <button onClick={handleLogout} className="button button-outline" style={{ padding: '0.5rem', borderRadius: '50%' }}>
                         <LogOut size={18} />

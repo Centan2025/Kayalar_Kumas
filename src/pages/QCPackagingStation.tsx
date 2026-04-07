@@ -11,7 +11,7 @@ import { type Order } from './Orders';
 
 export default function QCPackagingStation() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [orderId, setOrderId] = useState('');
@@ -185,9 +185,16 @@ export default function QCPackagingStation() {
     return (
         <div>
             <header className="app-header">
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ArrowLeft size={20} /> Geri
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button onClick={() => navigate('/dashboard')} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <ArrowLeft size={20} /> Geri
+                    </button>
+                    <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }}></span>
+                         {profile?.full_name || 'Operatör'}
+                    </div>
+                </div>
                 <OfflineSyncBadge />
             </header>
 
