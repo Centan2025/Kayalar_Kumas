@@ -47,7 +47,7 @@ export default function QRPrintModal({ id, label, subLabel, parts = 1, onClose }
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem'
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '1rem'
         }}>
             <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '360px', textAlign: 'center', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                 <div className="flex justify-between items-center" style={{ marginBottom: '1rem' }}>
