@@ -66,6 +66,7 @@ export default function Reports() {
         dailyStats: [] as DailyStat[],
         stationStats: [] as StationStat[],
         criticalStocks: [] as CriticalStock[],
+        operatorStats: [] as any[],
         dailyOrders: [] as { day: string, count: number }[],
         monthlyOrders: [] as { month: string, count: number }[],
         yearlyRevenue: [
@@ -137,8 +138,34 @@ export default function Reports() {
             return { month: mName, count };
         });
 
+        // 6. Operator Stats
+        const { data: profiles } = await supabase.from('profiles').select('*');
+        const { data: logs } = await supabase.from('action_logs').select('*');
+        
+        const allLogs = logs || [];
+        const operatorStats = (profiles || [])
+            .filter(p => !p.roles?.includes('ADMIN')) // Yöneticileri dışarıda tut
+            .map(p => {
+                const operatorLogs = allLogs.filter(log => log.user_id === p.id);
+                const tasksCompleted = operatorLogs.length;
+
+                const rejectLogs = operatorLogs.filter(log => log.action_type === 'REJECTED').length;
+                let successRate = 100;
+                if (tasksCompleted > 0) {
+                    successRate = Math.round(Math.max(0, ((tasksCompleted - rejectLogs) / tasksCompleted) * 100));
+                }
+
+                return {
+                    id: p.id,
+                    name: p.full_name || 'İsimsiz Operatör',
+                    role: p.roles ? p.roles.join(', ') : p.role || '',
+                    tasksCompleted,
+                    successRate,
+                };
+            }).sort((a, b) => b.tasksCompleted - a.tasksCompleted);
+
         setData({
-            dailyStats, stationStats, criticalStocks, dailyOrders, monthlyOrders, yearlyRevenue: [
+            dailyStats, stationStats, criticalStocks, dailyOrders, monthlyOrders, operatorStats, yearlyRevenue: [
                 { year: '2024', revenue: 1680 },
                 { year: '2025', revenue: 2150 },
                 { year: '2026', revenue: allOrders.length * 0.15 }, // Mock revenue calculation
@@ -278,6 +305,53 @@ export default function Reports() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+
+                {/* Operator Performance */}
+                <div className="card" style={{ marginBottom: '2rem' }}>
+                    <div className="flex items-center gap-2" style={{ marginBottom: '1.5rem' }}>
+                        <Users size={20} color="var(--primary)" />
+                        <h3 style={{ margin: 0 }}>Operatör Performansları</h3>
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                                    <th style={{ padding: '0.75rem', fontWeight: 500 }}>Personel</th>
+                                    <th style={{ padding: '0.75rem', fontWeight: 500 }}>Görevler (Haftalık)</th>
+                                    <th style={{ padding: '0.75rem', fontWeight: 500 }}>Kalite Puanı</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.operatorStats.map((op, idx) => (
+                                    <tr key={op.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', backgroundColor: idx === 0 ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
+                                        <td style={{ padding: '0.75rem' }}>
+                                            <div style={{ fontWeight: 600 }}>{op.name} {idx === 0 && '👑'}</div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{op.role}</div>
+                                        </td>
+                                        <td style={{ padding: '0.75rem' }}>
+                                            <span className="badge" style={{ backgroundColor: 'rgba(79,70,229,0.1)', color: 'var(--primary)', fontWeight: 600 }}>
+                                                {op.tasksCompleted} Ürün
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '0.75rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{ color: op.successRate >= 95 ? 'var(--success)' : (op.successRate >= 90 ? 'var(--warning)' : 'var(--danger)'), fontWeight: 600 }}>
+                                                    %{op.successRate}
+                                                </span>
+                                                <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--bg-color)', borderRadius: '2px', maxWidth: '100px' }}>
+                                                    <div style={{ width: `${op.successRate}%`, height: '100%', backgroundColor: op.successRate >= 95 ? 'var(--success)' : 'var(--warning)' }} />
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {data.operatorStats.length === 0 && (
+                                    <tr><td colSpan={3} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Mevcut operatör bilgisi bulunamadı.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

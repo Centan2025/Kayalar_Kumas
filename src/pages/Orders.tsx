@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, ChevronDown, ChevronUp, QrCode } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode, X, LayoutGrid, List, Search, Clock, MapPin, Phone, FileText, Users, Package } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
+import CustomDatePicker from '../components/CustomDatePicker';
 import { supabase } from '../lib/supabase';
 
 export type OrderStatus = 'PENDING' | 'CUTTING' | 'SEWING' | 'QC' | 'READY' | 'IN_TRANSIT' | 'DELIVERED';
@@ -13,7 +14,7 @@ export const STATUS_LABELS: Record<OrderStatus, { label: string; color: string }
     CUTTING: { label: 'Kesimde', color: '#8b5cf6' },
     SEWING: { label: 'Dikimde', color: '#f59e0b' },
     QC: { label: 'Kalite Kontrol', color: '#3b82f6' },
-    READY: { label: 'Paketlemeye Hazır', color: '#10b981' },
+    READY: { label: 'Hazır', color: '#10b981' },
     IN_TRANSIT: { label: 'Yolda', color: '#f97316' },
     DELIVERED: { label: 'Teslim Edildi', color: '#059669' },
 };
@@ -42,29 +43,56 @@ export type Order = {
     imageUrls: string[];
 };
 
-// Shared mock data — export for use in Scanner, QC, etc.
-export const INITIAL_ORDERS: Order[] = [
-    { id: 'ORD-1029', customerName: 'Ayşe Yılmaz', customerPhone: '0532 111 22 33', customerAddress: 'Bağdat Cad. No:42 Daire:5', customerCity: 'İstanbul / Kadıköy', invoiceName: 'Ayşe Yılmaz', invoiceTaxNo: '', invoiceAddress: 'Bağdat Cad. No:42 Kadıköy/İstanbul', fabricCode: 'K-900', mechanism: 'Motorlu', width: 320, height: 260, pileRatio: 2.5, status: 'SEWING', notes: 'Lazer kesim yapılacak', createdAt: '2026-03-01', deliveryDate: '2026-03-10', revisionCount: 0, parentOrderId: null, parts: 2, imageUrls: [] },
-    { id: 'ORD-1050', customerName: 'Mehmet Demir', customerPhone: '0533 444 55 66', customerAddress: 'Atatürk Bulvarı No:88', customerCity: 'Ankara / Çankaya', invoiceName: 'Demir Mobilya Ltd.', invoiceTaxNo: '1234567890', invoiceAddress: 'Atatürk Bulvarı No:88 Çankaya/Ankara', fabricCode: 'T-120', mechanism: 'Manuel', width: 200, height: 240, pileRatio: 2.0, status: 'QC', notes: '', createdAt: '2026-03-03', deliveryDate: '2026-03-12', revisionCount: 1, parentOrderId: 'ORD-1049', parts: 1, imageUrls: [] },
-    { id: 'ORD-1051', customerName: 'Fatma Kara', customerPhone: '0535 777 88 99', customerAddress: 'Cumhuriyet Mah. 123 Sok. No:7', customerCity: 'İzmir / Karşıyaka', invoiceName: 'Fatma Kara', invoiceTaxNo: '', invoiceAddress: 'Cumhuriyet Mah. 123 Sok. No:7 Karşıyaka/İzmir', fabricCode: 'K-900', mechanism: 'Raylı', width: 400, height: 300, pileRatio: 3.0, status: 'PENDING', notes: 'Salon fon perde + tül', createdAt: '2026-03-05', deliveryDate: '2026-03-15', revisionCount: 0, parentOrderId: null, parts: 3, imageUrls: [] },
-    { id: 'ORD-1052', customerName: 'Ali Öztürk', customerPhone: '0537 000 11 22', customerAddress: 'Sahil Yolu Cd. No:15', customerCity: 'Antalya / Muratpaşa', invoiceName: 'Ali Öztürk', invoiceTaxNo: '', invoiceAddress: 'Sahil Yolu Cd. No:15 Muratpaşa/Antalya', fabricCode: 'S-200', mechanism: 'Motorlu', width: 180, height: 220, pileRatio: 1.0, status: 'DELIVERED', notes: 'Store perde', createdAt: '2026-02-20', deliveryDate: '2026-03-01', revisionCount: 0, parentOrderId: null, parts: 1, imageUrls: [] },
-];
-
 export default function Orders() {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+    const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
     const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
+    const [startDate, setStartDate] = useState<Date | null>(null);
+    const [endDate, setEndDate] = useState<Date | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
     const [qrModalOrder, setQrModalOrder] = useState<Order | null>(null);
 
+    // Form States
     const [f, setF] = useState({
         customerName: '', customerPhone: '', customerAddress: '', customerCity: '',
         invoiceName: '', invoiceTaxNo: '', invoiceAddress: '',
-        fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '',
-        notes: '', deliveryDate: '', parts: '1'
+        deliveryDate: null as Date | null
     });
+
+    const [orderItems, setOrderItems] = useState([
+        { fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '1.0', parts: '1', notes: '' }
+    ]);
+
+    const addOrderItem = () => {
+        setOrderItems([...orderItems, { fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '1.0', parts: '1', notes: '' }]);
+    };
+
+    const removeOrderItem = (index: number) => {
+        if (orderItems.length > 1) {
+            setOrderItems(orderItems.filter((_, i) => i !== index));
+        }
+    };
+
+    const updateOrderItem = (index: number, field: string, value: string) => {
+        const newItems = [...orderItems];
+        (newItems[index] as any)[field] = value;
+        setOrderItems(newItems);
+    };
+
+    const getDaysRemaining = (dateStr: string) => {
+        if (!dateStr) return 0;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const delivery = new Date(dateStr);
+        delivery.setHours(0,0,0,0);
+        const diffTime = delivery.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+    };
 
     useEffect(() => {
         fetchOrders();
@@ -80,7 +108,6 @@ export default function Orders() {
         if (error) {
             console.error('Fetch error:', error);
         } else {
-            // Map snake_case to camelCase
             const mapped = (data || []).map((o: any) => ({
                 id: o.id,
                 customerName: o.customer_name,
@@ -110,29 +137,34 @@ export default function Orders() {
     }
 
     const handleImageUpdate = async (orderId: string, newUrl: string) => {
-        const order = orders.find(o => o.id === orderId);
-        if (!order) return;
+        let latestUrls: string[] = [];
+        setOrders(prev => {
+            const order = prev.find(o => o.id === orderId);
+            if (order) {
+                latestUrls = [...(order.imageUrls || []), newUrl];
+            } else {
+                latestUrls = [newUrl];
+            }
+            return prev.map(o => o.id === orderId ? { ...o, imageUrls: latestUrls } : o);
+        });
+        const { error } = await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
+    };
 
-        const updatedUrls = [...order.imageUrls, newUrl];
-
-        const { error } = await supabase
-            .from('orders')
-            .update({ image_urls: updatedUrls })
-            .eq('id', orderId);
-
-        if (error) {
-            alert('Resim kaydedilemedi: ' + error.message);
-        } else {
-            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, imageUrls: updatedUrls } : o));
-        }
+    const handleImageRemove = async (orderId: string, urlToRemove: string) => {
+        let latestUrls: string[] = [];
+        setOrders(prev => {
+            const order = prev.find(o => o.id === orderId);
+            if (order) latestUrls = order.imageUrls.filter(u => u !== urlToRemove);
+            return prev.map(o => o.id === orderId ? { ...o, imageUrls: latestUrls } : o);
+        });
+        const { error } = await supabase.from('orders').update({ image_urls: latestUrls }).eq('id', orderId);
     };
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        const orderId = `ORD-${Date.now().toString().slice(-4)}`;
-
-        const newOrderObj = {
-            id: orderId,
+        setLoading(true);
+        const newOrders = orderItems.map((item, idx) => ({
+            id: `ORD-${Date.now().toString().slice(-4)}-${idx + 1}`,
             customer_name: f.customerName,
             customer_phone: f.customerPhone,
             customer_address: f.customerAddress,
@@ -140,42 +172,66 @@ export default function Orders() {
             invoice_name: f.invoiceName || f.customerName,
             invoice_tax_no: f.invoiceTaxNo,
             invoice_address: f.invoiceAddress || f.customerAddress,
-            fabric_code: f.fabricCode,
-            mechanism: f.mechanism,
-            width: parseFloat(f.width),
-            height: parseFloat(f.height),
-            pile_ratio: parseFloat(f.pileRatio) || 2.0,
+            fabric_code: item.fabricCode,
+            mechanism: item.mechanism,
+            width: parseFloat(item.width),
+            height: parseFloat(item.height),
+            pile_ratio: parseFloat(item.pileRatio) || 1.0,
             status: 'PENDING',
-            notes: f.notes,
-            delivery_date: f.deliveryDate,
-            parts: parseInt(f.parts) || 1
-        };
-
-        const { error } = await supabase.from('orders').insert([newOrderObj]);
-
-        if (error) {
-            alert('Hata: ' + error.message);
-            return;
+            notes: item.notes,
+            delivery_date: f.deliveryDate ? f.deliveryDate.toISOString().split('T')[0] : null,
+            parts: parseInt(item.parts) || 1
+        }));
+        const { error } = await supabase.from('orders').insert(newOrders);
+        if (!error) {
+            await fetchOrders();
+            setShowForm(false);
+            setOrderItems([{ fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '1.0', parts: '1', notes: '' }]);
+            setF({ customerName: '', customerPhone: '', customerAddress: '', customerCity: '', invoiceName: '', invoiceTaxNo: '', invoiceAddress: '', deliveryDate: null });
         }
-
-        await fetchOrders();
-        setShowForm(false);
-        // Map back for the modal
-        setQrModalOrder({
-            ...newOrderObj,
-            customerName: newOrderObj.customer_name,
-            fabricCode: newOrderObj.fabric_code,
-            mechanism: newOrderObj.mechanism,
-            width: newOrderObj.width,
-            height: newOrderObj.height,
-            deliveryDate: newOrderObj.delivery_date,
-            createdAt: new Date().toISOString()
-        } as any);
-
-        setF({ customerName: '', customerPhone: '', customerAddress: '', customerCity: '', invoiceName: '', invoiceTaxNo: '', invoiceAddress: '', fabricCode: '', mechanism: 'Manuel', width: '', height: '', pileRatio: '', notes: '', deliveryDate: '', parts: '1' });
+        setLoading(false);
     };
 
-    const filteredOrders = statusFilter === 'ALL' ? orders : orders.filter(o => o.status === statusFilter);
+    const filteredOrders = orders.filter(o => {
+        const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
+        let matchesDate = true;
+        if (startDate || endDate) {
+            const orderDate = new Date(o.createdAt);
+            orderDate.setHours(0,0,0,0);
+            if (startDate) { const s = new Date(startDate); s.setHours(0,0,0,0); if (orderDate < s) matchesDate = false; }
+            if (endDate) { const e = new Date(endDate); e.setHours(0,0,0,0); if (orderDate > e) matchesDate = false; }
+        }
+        const matchesSearch = !searchTerm || 
+            o.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            o.fabricCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            o.id.toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesStatus && matchesDate && matchesSearch;
+    });
+
+    const groupedOrders = filteredOrders.reduce((acc: any, order: Order) => {
+        const dateKey = new Date(order.createdAt).toLocaleDateString();
+        const groupKey = `${order.customerName}-${dateKey}`;
+        if (!acc[groupKey]) {
+            acc[groupKey] = {
+                groupKey: groupKey, 
+                id: order.id.includes('-') ? order.id.split('-').slice(0, 2).join('-') : order.id,
+                customerName: order.customerName,
+                customerCity: order.customerCity,
+                customerPhone: order.customerPhone,
+                createdAt: order.createdAt,
+                deliveryDate: order.deliveryDate,
+                items: [] as Order[],
+                status: order.status,
+            };
+        }
+        acc[groupKey].items.push(order);
+        return acc;
+    }, {});
+
+    const orderGroups = Object.values(groupedOrders).sort((a: any, b: any) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
     const allStatuses: (OrderStatus | 'ALL')[] = ['ALL', 'PENDING', 'CUTTING', 'SEWING', 'QC', 'READY', 'IN_TRANSIT', 'DELIVERED'];
 
     return (
@@ -188,17 +244,36 @@ export default function Orders() {
             </header>
 
             <main className="container animate-fade-in" style={{ marginTop: '2rem' }}>
-                <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
-                    <div>
-                        <h2>Sipariş Yönetimi</h2>
-                        <p style={{ color: 'var(--text-muted)' }}>Tüm siparişleri oluştur, takip et ve yönet.</p>
+                <div className="flex justify-between items-center" style={{ marginBottom: '2rem' }}>
+                    <h2>Siparişler</h2>
+                    <div className="flex gap-2">
+                         <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)' }}>
+                            <button onClick={() => setViewMode('card')} style={{ padding: '0.5rem', border: 'none', backgroundColor: viewMode === 'card' ? 'var(--card-bg)' : 'transparent', color: viewMode === 'card' ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><LayoutGrid size={20} /></button>
+                            <button onClick={() => setViewMode('list')} style={{ padding: '0.5rem', border: 'none', backgroundColor: viewMode === 'list' ? 'var(--card-bg)' : 'transparent', color: viewMode === 'list' ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}><List size={20} /></button>
+                        </div>
+                        <button onClick={() => setShowForm(!showForm)} className="button">
+                            <Plus size={20} /> {showForm ? 'Kapat' : 'Yeni Kayıt'}
+                        </button>
                     </div>
-                    <button onClick={() => setShowForm(!showForm)} className="button">
-                        <Plus size={20} /> {showForm ? 'İptal' : 'Yeni Sipariş'}
-                    </button>
                 </div>
 
-                {/* Status Filter Tabs */}
+                {/* Filters */}
+                <div className="flex flex-wrap gap-4" style={{ marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+                     <div style={{ flex: '1', minWidth: '250px', position: 'relative' }}>
+                        <Search size={18} style={{ position: 'absolute', left: '10px', bottom: '12px', color: 'var(--text-muted)' }} />
+                        <input className="input" placeholder="Müşteri, kumaş veya sipariş no..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ paddingLeft: '2.5rem' }} />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Başlangıç</label>
+                        <CustomDatePicker selected={startDate} onChange={setStartDate} />
+                    </div>
+                    <div>
+                         <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bitiş</label>
+                        <CustomDatePicker selected={endDate} onChange={setEndDate} />
+                    </div>
+                    {(startDate || endDate || searchTerm) && <button onClick={() => { setStartDate(null); setEndDate(null); setSearchTerm(''); }} className="button button-outline"><X size={16}/></button>}
+                </div>
+
                 <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '1.5rem', padding: '0.25rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius-md)' }}>
                     {allStatuses.map(s => (
                         <button key={s} onClick={() => setStatusFilter(s)} style={{
@@ -206,196 +281,211 @@ export default function Orders() {
                             backgroundColor: statusFilter === s ? 'var(--card-bg)' : 'transparent',
                             color: statusFilter === s ? (s === 'ALL' ? 'var(--primary)' : STATUS_LABELS[s as OrderStatus].color) : 'var(--text-muted)',
                             fontWeight: statusFilter === s ? 600 : 400, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
-                            boxShadow: statusFilter === s ? 'var(--shadow-sm)' : 'none',
                         }}>
                             {s === 'ALL' ? `Tümü (${orders.length})` : `${STATUS_LABELS[s].label} (${orders.filter(o => o.status === s).length})`}
                         </button>
                     ))}
                 </div>
 
-                {/* Create Form */}
                 {showForm && (
-                    <div className="card animate-fade-in" style={{ marginBottom: '2rem', border: '1px solid var(--primary)' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>Yeni Sipariş Oluştur</h3>
-                        <form onSubmit={handleCreate} className="flex flex-col gap-4">
-
-                            {/* Müşteri Bilgileri */}
-                            <h4 style={{ margin: '0.5rem 0 0 0', color: 'var(--primary)', fontSize: '0.9rem' }}>👤 Müşteri Bilgileri</h4>
+                     <div className="card animate-fade-in" style={{ marginBottom: '2rem', border: '2px solid var(--primary)' }}>
+                        <form onSubmit={handleCreate} className="flex flex-col gap-6">
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Müşteri Adı *</label>
-                                    <input className="input" required value={f.customerName} onChange={e => setF({ ...f, customerName: e.target.value })} placeholder="Ad Soyad" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Telefon *</label>
-                                    <input className="input" required value={f.customerPhone} onChange={e => setF({ ...f, customerPhone: e.target.value })} placeholder="0532 ..." /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>İl / İlçe</label>
-                                    <input className="input" value={f.customerCity} onChange={e => setF({ ...f, customerCity: e.target.value })} placeholder="İstanbul / Kadıköy" /></div>
+                                <input className="input" value={f.customerName} onChange={e => setF({ ...f, customerName: e.target.value })} placeholder="Müşteri Ad Soyad" required />
+                                <input className="input" value={f.customerPhone} onChange={e => setF({ ...f, customerPhone: e.target.value })} placeholder="Telefon" />
+                                <CustomDatePicker selected={f.deliveryDate} onChange={d => setF({...f, deliveryDate: d})} placeholderText="Teslim Tarihi" required />
                             </div>
-                            <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Teslimat Adresi *</label>
-                                <input className="input" required value={f.customerAddress} onChange={e => setF({ ...f, customerAddress: e.target.value })} placeholder="Mahalle, Sokak, Bina No, Daire" /></div>
-
-                            {/* Fatura Bilgileri */}
-                            <h4 style={{ margin: '0.5rem 0 0 0', color: 'var(--primary)', fontSize: '0.9rem' }}>🧾 Fatura Bilgileri</h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Fatura Adı / Unvanı</label>
-                                    <input className="input" value={f.invoiceName} onChange={e => setF({ ...f, invoiceName: e.target.value })} placeholder="Boş bırakılırsa müşteri adı kullanılır" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Vergi No / TC Kimlik</label>
-                                    <input className="input" value={f.invoiceTaxNo} onChange={e => setF({ ...f, invoiceTaxNo: e.target.value })} placeholder="Bireysel ise TC, kurumsal ise VKN" /></div>
-                            </div>
-                            <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Fatura Adresi</label>
-                                <input className="input" value={f.invoiceAddress} onChange={e => setF({ ...f, invoiceAddress: e.target.value })} placeholder="Boş bırakılırsa teslimat adresi kullanılır" /></div>
-
-                            {/* Ürün Detayları */}
-                            <h4 style={{ margin: '0.5rem 0 0 0', color: 'var(--primary)', fontSize: '0.9rem' }}>📐 Ürün Detayları</h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Kumaş Kodu *</label>
-                                    <input className="input" required value={f.fabricCode} onChange={e => setF({ ...f, fabricCode: e.target.value })} placeholder="K-900" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Mekanizma</label>
-                                    <select className="input" value={f.mechanism} onChange={e => setF({ ...f, mechanism: e.target.value })}>
-                                        <option>Manuel</option><option>Motorlu</option><option>Raylı</option><option>İpli</option>
-                                    </select></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>En (cm) *</label>
-                                    <input type="number" className="input" required value={f.width} onChange={e => setF({ ...f, width: e.target.value })} placeholder="320" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Boy (cm) *</label>
-                                    <input type="number" className="input" required value={f.height} onChange={e => setF({ ...f, height: e.target.value })} placeholder="260" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Pile Oranı</label>
-                                    <input type="number" step="0.1" className="input" value={f.pileRatio} onChange={e => setF({ ...f, pileRatio: e.target.value })} placeholder="2.5" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Parça Sayısı</label>
-                                    <input type="number" className="input" value={f.parts} onChange={e => setF({ ...f, parts: e.target.value })} placeholder="1" /></div>
-                                <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Teslim Tarihi</label>
-                                    <input type="date" className="input" value={f.deliveryDate} onChange={e => setF({ ...f, deliveryDate: e.target.value })} /></div>
-                            </div>
-                            <div><label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Özel Notlar</label>
-                                <input className="input" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Lazer kesim, özel dikiş vb." /></div>
-                            <button type="submit" className="button" style={{ alignSelf: 'flex-start' }}>Siparişi Kaydet ve QR Oluştur</button>
+                            {orderItems.map((item, idx) => (
+                                <div key={idx} className="card" style={{ padding: '1rem', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                                    <div className="flex justify-between" style={{ marginBottom: '1rem' }}><strong>KALEM #{idx + 1}</strong> {orderItems.length > 1 && <button type="button" onClick={() => removeOrderItem(idx)}>Kaldır</button>}</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
+                                        <input className="input" value={item.fabricCode} onChange={e => updateOrderItem(idx, 'fabricCode', e.target.value)} placeholder="Kumaş Kodu" required />
+                                        <input type="number" className="input" value={item.width} onChange={e => updateOrderItem(idx, 'width', e.target.value)} placeholder="En (cm)" required />
+                                        <input type="number" className="input" value={item.height} onChange={e => updateOrderItem(idx, 'height', e.target.value)} placeholder="Boy (cm)" required />
+                                    </div>
+                                </div>
+                            ))}
+                            <button type="button" onClick={addOrderItem} className="button button-outline">+ Kalem Ekle</button>
+                            <button type="submit" className="button" disabled={loading}>Kaydet</button>
                         </form>
-                    </div>
+                     </div>
                 )}
 
-                {/* Orders List */}
-                <div className="flex flex-col gap-4">
-                    {loading ? (
-                        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Siparişler yükleniyor...</div>
-                    ) : filteredOrders.map(order => (
-                        <div key={order.id} className="card" style={{ borderLeft: `4px solid ${STATUS_LABELS[order.status].color}` }}>
-                            <div className="flex justify-between items-center" style={{ cursor: 'pointer' }} onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}>
-                                <div className="flex items-center gap-4">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h3 style={{ margin: 0 }}>{order.id}</h3>
-                                            {order.revisionCount > 0 && (
-                                                <span className="badge" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.2)', fontSize: '0.7rem' }}>
-                                                    {order.revisionCount}. Revizyon
-                                                </span>
-                                            )}
+                {viewMode === 'card' ? (
+                    <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                        {orderGroups.map((group: any) => {
+                            const daysLeft = getDaysRemaining(group.deliveryDate);
+                            const urgencyColor = daysLeft < 0 ? 'var(--danger)' : daysLeft <= 3 ? 'var(--warning)' : 'var(--success)';
+                            return (
+                                <div key={group.groupKey} className="card" style={{ borderTop: `6px solid ${STATUS_LABELS[group.status as OrderStatus].color}`, display: 'flex', flexDirection: 'column', minHeight: '260px' }}>
+                                    <div className="flex justify-between items-start" style={{ marginBottom: '1rem' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0 }}>{group.customerName}</h3>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{group.id} • {group.items.length} Kalem</span>
                                         </div>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0.25rem 0 0 0' }}>
-                                            {order.customerName} • {order.fabricCode} • {order.mechanism} • {order.customerCity}
-                                        </p>
+                                        <span className="badge" style={{ color: STATUS_LABELS[group.status as OrderStatus].color, border: `1px solid ${STATUS_LABELS[group.status as OrderStatus].color}` }}>{STATUS_LABELS[group.status as OrderStatus].label}</span>
+                                    </div>
+
+                                    <div style={{ flex: 1, backgroundColor: 'var(--bg-color)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                                        {group.items.slice(0, 2).map((it: any, i: number) => (
+                                            <div key={i} style={{ fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {it.fabricCode} <span style={{ color: 'var(--text-muted)' }}>({it.width}x{it.height})</span>
+                                            </div>
+                                        ))}
+                                        {group.items.length > 2 && <div style={{ fontSize: '0.75rem', color: 'var(--primary)', marginTop: '0.25rem' }}>+{group.items.length - 2} kalem daha...</div>}
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <div style={{ color: urgencyColor, fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            <Clock size={14} /> {daysLeft < 0 ? 'Gecikti!' : `${daysLeft} gün kaldı`}
+                                        </div>
+                                        <button onClick={() => setSelectedGroup(group)} className="button" style={{ padding: '0.5rem 1rem' }}>Yönet</button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                    <span className="badge" style={{ backgroundColor: `${STATUS_LABELS[order.status].color}20`, color: STATUS_LABELS[order.status].color, border: `1px solid ${STATUS_LABELS[order.status].color}40` }}>
-                                        {STATUS_LABELS[order.status].label}
-                                    </span>
-                                    {expandedOrder === order.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+                        <table className="w-full">
+                            <thead>
+                                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                                    <th style={{ padding: '1rem' }}>Sipariş No</th>
+                                    <th style={{ padding: '1rem' }}>Müşteri</th>
+                                    <th style={{ padding: '1rem' }}>Kalem</th>
+                                    <th style={{ padding: '1rem' }}>Durum</th>
+                                    <th style={{ padding: '1rem' }}>Termin</th>
+                                    <th style={{ padding: '1rem' }}>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {orderGroups.map((group: any) => {
+                                    const daysLeft = getDaysRemaining(group.deliveryDate);
+                                    return (
+                                        <tr key={group.groupKey} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                            <td style={{ padding: '1rem' }}><strong>{group.id}</strong></td>
+                                            <td style={{ padding: '1rem' }}>{group.customerName}</td>
+                                            <td style={{ padding: '1rem' }}>{group.items.length}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{ color: STATUS_LABELS[group.status as OrderStatus].color, fontWeight: 600 }}>{STATUS_LABELS[group.status as OrderStatus].label}</span>
+                                            </td>
+                                            <td style={{ padding: '1rem', color: daysLeft < 0 ? 'var(--danger)' : 'inherit' }}>
+                                                {daysLeft < 0 ? 'Gecikti' : `${daysLeft} gün`}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <button onClick={() => setSelectedGroup(group)} className="button button-outline" style={{ padding: '0.25rem 0.75rem' }}>Detay</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </main>
+
+            {/* Focused Modal - Redesigned to show ALL info */}
+            {selectedGroup && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--bg-color)', zIndex: 1000, overflowY: 'auto' }}>
+                    <header className="app-header" style={{ position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem 2rem', borderBottom: '2px solid var(--primary)' }}>
+                        <div className="flex justify-between items-center w-full">
+                            <button onClick={() => setSelectedGroup(null)} className="button button-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ArrowLeft size={18} /> Geri</button>
+                            <div style={{ textAlign: 'right' }}>
+                                <h2 style={{ margin: 0, color: 'var(--primary)' }}>{selectedGroup.customerName}</h2>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedGroup.id} • {selectedGroup.items.length} Kalem</span>
                             </div>
+                        </div>
+                        
+                        <div className="flex gap-6 flex-wrap" style={{ fontSize: '0.85rem', padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '12px', width: '100%' }}>
+                            <div className="flex items-center gap-2"><Phone size={14} color="var(--text-muted)" /> <strong>{selectedGroup.customerPhone || '-'}</strong></div>
+                            <div className="flex items-center gap-2"><MapPin size={14} color="var(--text-muted)" /> <strong>{selectedGroup.customerCity || '-'}</strong></div>
+                            <div className="flex items-center gap-2"><Clock size={14} color="var(--danger)" /> Termin: <strong>{new Date(selectedGroup.deliveryDate).toLocaleDateString('tr-TR')}</strong></div>
+                            <div className="flex items-center gap-2"><Users size={14} color="var(--primary)" /> <strong>{selectedGroup.customerName}</strong></div>
+                        </div>
+                    </header>
+                    
+                    <main className="container animate-fade-in" style={{ padding: '1.5rem 1rem' }}>
 
-                            {expandedOrder === order.id && (
-                                <div className="animate-fade-in" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-                                    {/* Progress Steps */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', position: 'relative' }}>
-                                        <div style={{ position: 'absolute', top: '14px', left: '5%', right: '5%', height: '3px', backgroundColor: 'var(--border-color)', zIndex: 0 }}></div>
-                                        {(['PENDING', 'CUTTING', 'SEWING', 'QC', 'READY', 'DELIVERED'] as OrderStatus[]).map((step, idx) => {
-                                            const allSteps: OrderStatus[] = ['PENDING', 'CUTTING', 'SEWING', 'QC', 'READY', 'DELIVERED'];
-                                            const currentIdx = allSteps.indexOf(order.status);
-                                            const isActive = idx <= currentIdx;
-                                            const isCurrent = step === order.status;
-                                            return (
-                                                <div key={step} style={{ textAlign: 'center', position: 'relative', zIndex: 1, flex: 1 }}>
-                                                    <div style={{
-                                                        width: '28px', height: '28px', borderRadius: '50%', margin: '0 auto',
-                                                        backgroundColor: isActive ? STATUS_LABELS[step].color : 'var(--border-color)',
-                                                        border: isCurrent ? `3px solid ${STATUS_LABELS[step].color}` : 'none',
-                                                        boxShadow: isCurrent ? `0 0 0 4px ${STATUS_LABELS[step].color}30` : 'none',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    }}>
-                                                        {isActive && <span style={{ color: 'white', fontSize: '0.7rem' }}>✓</span>}
-                                                    </div>
-                                                    <span style={{ fontSize: '0.65rem', color: isCurrent ? STATUS_LABELS[step].color : 'var(--text-muted)', marginTop: '0.25rem', display: 'block', fontWeight: isCurrent ? 600 : 400 }}>
-                                                        {STATUS_LABELS[step].label}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
+                        {selectedGroup.items.map((item: Order) => (
+                            <div key={item.id} className="card" style={{ marginBottom: '2rem', padding: '2rem' }}>
+                                <div className="flex justify-between" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                                    <div className="flex items-center gap-3">
+                                        <div style={{ padding: '0.5rem', backgroundColor: 'var(--bg-color)', borderRadius: '8px' }}><Package size={24} color="var(--primary)" /></div>
+                                        <div><h2 style={{ margin: 0, fontSize: '1.4rem' }}>{item.fabricCode}</h2><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Kalem No: {item.id}</span></div>
                                     </div>
-
-                                    {/* Details Grid */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', fontSize: '0.875rem' }}>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>En × Boy:</span><br /><strong>{order.width} × {order.height} cm</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Pile Oranı:</span><br /><strong>×{order.pileRatio}</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Parça:</span><br /><strong>{order.parts} Adet</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Telefon:</span><br /><strong>{order.customerPhone}</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Sipariş Tarihi:</span><br /><strong>{order.createdAt}</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Teslim Tarihi:</span><br /><strong>{order.deliveryDate}</strong></div>
-                                    </div>
-
-                                    {/* Address & Invoice */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
-                                        <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                            <strong>📍 Teslimat Adresi</strong><br />
-                                            <span style={{ color: 'var(--text-muted)' }}>{order.customerAddress}<br />{order.customerCity}</span>
-                                        </div>
-                                        <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                            <strong>🧾 Fatura</strong><br />
-                                            <span style={{ color: 'var(--text-muted)' }}>{order.invoiceName}{order.invoiceTaxNo ? ` (VKN: ${order.invoiceTaxNo})` : ''}<br />{order.invoiceAddress}</span>
-                                        </div>
-                                    </div>
-
-                                    {order.notes && (
-                                        <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                            <strong>📝 Not:</strong> {order.notes}
-                                        </div>
-                                    )}
-                                    {order.parentOrderId && (
-                                        <div style={{ marginTop: '0.5rem', padding: '0.75rem', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                            <strong>🔄 Revizyon:</strong> Orijinal Sipariş: {order.parentOrderId}
-                                        </div>
-                                    )}
-
-                                    {/* Biten İş Görselleri */}
-                                    {(order.status === 'READY' || order.status === 'DELIVERED' || order.status === 'IN_TRANSIT') && (
-                                        <div style={{ marginTop: '1rem' }}>
-                                            <ImageUploader
-                                                label="📸 Biten İş Görselleri (WebP)"
-                                                entityId={order.id}
-                                                existingImages={order.imageUrls}
-                                                onImageSaved={(url) => handleImageUpdate(order.id, url)}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-2" style={{ marginTop: '1rem' }}>
-                                        <button onClick={() => setQrModalOrder(order)} className="button button-outline" style={{ flex: 1, fontSize: '0.8rem', gap: '0.4rem' }}>
-                                            <QrCode size={16} /> QR Etiketi Bas
-                                        </button>
-                                    </div>
+                                    <span className="badge" style={{ backgroundColor: `${STATUS_LABELS[item.status].color}20`, color: STATUS_LABELS[item.status].color, padding: '0.5rem 1rem', fontSize: '1rem', fontWeight: 700 }}>{STATUS_LABELS[item.status].label}</span>
                                 </div>
-                            )}
+                                <OrderDetailsView order={item} setQrModalOrder={setQrModalOrder} handleImageUpdate={handleImageUpdate} handleImageRemove={handleImageRemove} />
+                            </div>
+                        ))}
+                    </main>
+                </div>
+            )}
+
+            {qrModalOrder && <QRPrintModal id={qrModalOrder.id} label={qrModalOrder.customerName} subLabel={qrModalOrder.fabricCode} parts={qrModalOrder.parts} onClose={() => setQrModalOrder(null)} />}
+        </div>
+    );
+}
+
+function OrderDetailsView({ order, setQrModalOrder, handleImageUpdate, handleImageRemove }: { order: Order, setQrModalOrder: any, handleImageUpdate: any, handleImageRemove: any }) {
+    const steps: OrderStatus[] = ['PENDING', 'CUTTING', 'SEWING', 'QC', 'READY', 'DELIVERED'];
+    const currentIdx = steps.indexOf(order.status);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            {/* Progress Bar - RESTORED & ENHANCED */}
+            <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Üretim Aşaması</span>
+                    <span style={{ fontSize: '0.85rem', color: STATUS_LABELS[order.status].color, fontWeight: 700 }}>{Math.round(((currentIdx + 1) / steps.length) * 100)}% Tamamlandı</span>
+                </div>
+                <div style={{ height: '12px', backgroundColor: 'var(--bg-color)', borderRadius: '10px', overflow: 'hidden', display: 'flex', gap: '2px' }}>
+                    {steps.map((s, i) => (
+                        <div key={s} style={{ flex: 1, backgroundColor: i <= currentIdx ? STATUS_LABELS[s].color : 'rgba(0,0,0,0.05)', transition: 'all 0.3s' }} />
+                    ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+                    {steps.map((s, i) => (
+                        <div key={s} style={{ fontSize: '0.65rem', color: i <= currentIdx ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: i === currentIdx ? 800 : 400, flex: 1, textAlign: 'center' }}>
+                            {STATUS_LABELS[s].label}
                         </div>
                     ))}
                 </div>
-            </main>
+            </div>
 
-            {/* QR Print Modal */}
-            {qrModalOrder && (
-                <QRPrintModal
-                    id={qrModalOrder.id}
-                    label={`${qrModalOrder.customerName} • ${qrModalOrder.fabricCode}`}
-                    subLabel={`${qrModalOrder.width}×${qrModalOrder.height}cm • ${qrModalOrder.mechanism}`}
-                    onClose={() => setQrModalOrder(null)}
-                />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', padding: '1.5rem', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
+                <div><label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ölçü (En x Boy)</label><br/><strong>{order.width}cm × {order.height}cm</strong></div>
+                <div><label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mekanizma</label><br/><strong>{order.mechanism}</strong></div>
+                <div><label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pile Oranı</label><br/><strong>×{order.pileRatio}</strong></div>
+                <div><label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Parça Sayısı</label><br/><strong>{order.parts} Adet</strong></div>
+            </div>
+
+            {order.notes && (
+                <div className="flex gap-4" style={{ 
+                    padding: '1.5rem', 
+                    backgroundColor: 'rgba(245, 158, 11, 0.08)', 
+                    borderRadius: '12px', 
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    borderLeft: '6px solid var(--warning)',
+                    marginTop: '1rem'
+                }}>
+                    <FileText size={24} color="var(--warning)" style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '1rem', lineHeight: '1.6' }}>
+                        <div style={{ fontWeight: 800, color: 'var(--warning)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                            <FileText size={16} /> ÖNEMLİ SİPARİŞ NOTU (ÜRETİM TALİMATI)
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-main)', fontWeight: 500 }}>
+                            {order.notes}
+                        </div>
+                    </div>
+                </div>
             )}
+
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '2rem' }}>
+                 <ImageUploader label="Üretim Görselleri" entityId={order.id} existingImages={order.imageUrls} onImageSaved={(url) => handleImageUpdate(order.id, url)} onImageRemoved={(url) => handleImageRemove(order.id, url)} />
+            </div>
+
+            <button onClick={() => setQrModalOrder(order)} className="button button-outline" style={{ width: '100%', gap: '0.5rem', justifyContent: 'center' }}><QrCode size={18}/> QR Etiketi Yazdır</button>
         </div>
     );
 }

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, PackagePlus, AlertTriangle, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode } from 'lucide-react';
+import { ArrowLeft, PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import QRPrintModal from '../components/QRPrintModal';
 import ImageUploader from '../components/ImageUploader';
+import CustomDatePicker from '../components/CustomDatePicker';
 import { supabase } from '../lib/supabase';
 
 // DB tipleri
@@ -29,6 +30,9 @@ export default function Warehouse() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ALL' | 'KUMAŞ' | 'AKSESUAR'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
+    const [dateFilter, setDateFilter] = useState<Date | null>(null); // Date object
+    const [viewMode, setViewMode] = useState<'card' | 'list' | 'history'>('card');
+    const [allTransactions, setAllTransactions] = useState<any[]>([]);
 
     useEffect(() => {
         fetchMaterials();
@@ -60,25 +64,56 @@ export default function Warehouse() {
                 )
             }));
             setMaterials(formatted);
+            
+            // Derive global transactions
+            const globalTxs = formatted.flatMap(m => m.history.map((h: any) => ({
+                ...h,
+                materialCode: m.code,
+                materialType: m.type,
+                materialId: m.id,
+                materialImage: m.imageUrls[0]
+            }))).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            
+            setAllTransactions(globalTxs);
         }
         setLoading(false);
     }
 
     const handleImageUpdate = async (materialId: string, newUrl: string) => {
-        const item = materials.find(m => m.id === materialId);
-        if (!item) return;
+        let latestUrls: string[] = [];
+        
+        setMaterials(prev => {
+            const item = prev.find(m => m.id === materialId);
+            if (item) {
+                latestUrls = [...(item.imageUrls || []), newUrl];
+            } else {
+                latestUrls = [newUrl];
+            }
+            return prev.map(m => m.id === materialId ? { ...m, imageUrls: latestUrls } : m);
+        });
 
-        const updatedUrls = [...item.imageUrls, newUrl];
-
-        const { error } = await supabase
-            .from('materials')
-            .update({ image_urls: updatedUrls })
-            .eq('id', materialId);
-
+        const { error } = await supabase.from('materials').update({ image_urls: latestUrls }).eq('id', materialId);
         if (error) {
-            alert('Resim kaydedilemedi: ' + error.message);
-        } else {
-            setMaterials(prev => prev.map(m => m.id === materialId ? { ...m, imageUrls: updatedUrls } : m));
+            console.error('DB Update Error:', error);
+            alert('Görsel veritabanına kaydedilemedi: ' + error.message);
+        }
+    };
+
+    const handleImageRemove = async (materialId: string, urlToRemove: string) => {
+        let latestUrls: string[] = [];
+        
+        setMaterials(prev => {
+            const item = prev.find(m => m.id === materialId);
+            if (item) {
+                latestUrls = item.imageUrls.filter(u => u !== urlToRemove);
+            }
+            return prev.map(m => m.id === materialId ? { ...m, imageUrls: latestUrls } : m);
+        });
+
+        const { error } = await supabase.from('materials').update({ image_urls: latestUrls }).eq('id', materialId);
+        if (error) {
+            console.error('DB Delete Error:', error);
+            alert('Görsel silinemedi: ' + error.message);
         }
     };
 
@@ -86,6 +121,7 @@ export default function Warehouse() {
     const [showAddForm, setShowAddForm] = useState(false);
     const [selectedMat, setSelectedMat] = useState<Material | null>(null);
     const [qrModalMat, setQrModalMat] = useState<Material | null>(null);
+    const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
     // Partial Add Form State
     const [newCode, setNewCode] = useState('');
@@ -179,7 +215,15 @@ export default function Warehouse() {
     const filteredMaterials = materials.filter(m => {
         const matchesTab = activeTab === 'ALL' || (activeTab === 'KUMAŞ' && m.type.includes('Kumaş')) || (activeTab === 'AKSESUAR' && !m.type.includes('Kumaş'));
         const matchesSearch = m.code.toLowerCase().includes(searchQuery.toLowerCase()) || m.type.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesTab && matchesSearch;
+        
+        let matchesDate = true;
+        if (dateFilter) {
+            const filterDateStr = dateFilter.toLocaleDateString();
+            const entryDateStr = new Date(m.created_at).toLocaleDateString();
+            matchesDate = entryDateStr === filterDateStr;
+        }
+        
+        return matchesTab && matchesSearch && matchesDate;
     });
 
     return (
@@ -204,10 +248,32 @@ export default function Warehouse() {
                         <h2>Depo ve Stok Yönetimi</h2>
                         <p style={{ color: 'var(--text-muted)' }}>Malzeme hareketleri ve anlık envanter takibi.</p>
                     </div>
-                    <button onClick={() => { setShowAddForm(!showAddForm); setSelectedMat(null); }} className="button">
-                        <PackagePlus size={20} />
-                        {showAddForm ? 'İptal' : 'Yeni Rulo Ekle'}
-                    </button>
+                    <div className="flex gap-2">
+                        <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)' }}>
+                            <button 
+                                onClick={() => setViewMode('card')} 
+                                title="Kart Görünümü"
+                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'card') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'card') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'card') ? 'var(--shadow-sm)' : 'none' }}>
+                                <LayoutGrid size={20} />
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('list')} 
+                                title="Liste Görünümü"
+                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'list') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'list') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'list') ? 'var(--shadow-sm)' : 'none' }}>
+                                <List size={20} />
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('history')} 
+                                title="Tüm Hareket Geçmişi"
+                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'history') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'history') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'history') ? 'var(--shadow-sm)' : 'none' }}>
+                                <History size={20} />
+                            </button>
+                        </div>
+                        <button onClick={() => { setShowAddForm(!showAddForm); setSelectedMat(null); }} className="button">
+                            <PackagePlus size={20} />
+                            {showAddForm ? 'İptal' : 'Yeni Rulo Ekle'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Toolbar: Search and Filters */}
@@ -222,6 +288,21 @@ export default function Warehouse() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
+                    </div>
+
+                    {/* Date Filter */}
+                    <div style={{ flex: 1, minWidth: '220px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Tarihe Göre:</label>
+                        <CustomDatePicker 
+                            selected={dateFilter} 
+                            onChange={setDateFilter} 
+                            placeholderText="Tarih seç..."
+                        />
+                        {dateFilter && (
+                            <button onClick={() => setDateFilter(null)} className="button button-outline" style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}>
+                                <X size={14} />
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)' }}>
@@ -283,52 +364,168 @@ export default function Warehouse() {
                     </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                    {filteredMaterials.map(mat => (
-                        <div
-                            key={mat.id}
-                            className="card"
-                            style={{
-                                borderLeft: mat.current <= mat.critical ? '4px solid var(--danger)' : '4px solid var(--success)',
-                                cursor: 'pointer'
-                            }}
-                            onClick={() => { setSelectedMat(mat); setShowAddForm(false); }}
-                        >
-                            <div className="flex justify-between items-center" style={{ marginBottom: '0.5rem' }}>
-                                <span className="badge badge-success" style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-main)' }}>{mat.id}</span>
-                                {mat.current <= mat.critical && (
-                                    <span className="badge badge-warning" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-                                        <AlertTriangle size={12} style={{ marginRight: '4px' }} />Kritik Stok
-                                    </span>
-                                )}
-                            </div>
-
-                            <h3 style={{ fontSize: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                {mat.code}
-                                <span style={{ fontSize: '0.875rem', fontWeight: 400, color: 'var(--text-muted)' }}>{mat.location}</span>
-                            </h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>{mat.type} • {mat.supplier}</p>
-
-                            <div style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px' }}>
-                                <div className="flex justify-between" style={{ marginBottom: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Kalan / Toplam</span>
-                                    <span style={{ fontWeight: 600, color: mat.current <= mat.critical ? 'var(--danger)' : 'var(--text-main)' }}>
-                                        {mat.current} / {mat.total} {mat.type.includes('Kumaş') ? 'm' : 'Adet'}
-                                    </span>
+                {/* Materials Content */}
+                {viewMode === 'history' ? (
+                    <div className="card animate-fade-in" style={{ padding: 0, overflowX: 'auto' }}>
+                         <table className="w-full" style={{ borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                            <thead style={{ backgroundColor: 'var(--bg-color)', borderBottom: '1px solid var(--border-color)' }}>
+                                <tr>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Tarih</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Görsel</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Malzeme</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>İşlem</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Miktar</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Not</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allTransactions.filter(tx => {
+                                    const matchesSearch = tx.materialCode.toLowerCase().includes(searchQuery.toLowerCase()) || tx.note.toLowerCase().includes(searchQuery.toLowerCase());
+                                    let matchesDate = true;
+                                    if (dateFilter) {
+                                        matchesDate = new Date(tx.created_at).toLocaleDateString() === dateFilter.toLocaleDateString();
+                                    }
+                                    return matchesSearch && matchesDate;
+                                }).map((tx, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                            {new Date(tx.created_at).toLocaleString('tr-TR')}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {tx.materialImage ? (
+                                                <img 
+                                                    src={tx.materialImage} 
+                                                    alt={tx.materialCode} 
+                                                    onClick={(e) => { e.stopPropagation(); setFullScreenImage(tx.materialImage); }}
+                                                    style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-color)', cursor: 'zoom-in' }} 
+                                                />
+                                            ) : (
+                                                <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--bg-color)', borderRadius: '6px', border: '1px dotted var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <LayoutGrid size={16} color="var(--text-muted)" opacity={0.5} />
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{tx.materialCode}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tx.materialType}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {tx.type === 'IN' ? (
+                                                <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                                                    <ArrowDownToLine size={16} /> GİRİŞ
+                                                </span>
+                                            ) : (
+                                                <span style={{ color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                                                    <ArrowUpFromLine size={16} /> ÇIKIŞ
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '1rem', fontWeight: 700 }}>
+                                            {tx.type === 'IN' ? '+' : '-'}{tx.amount}
+                                        </td>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{tx.note}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : viewMode === 'card' ? (
+                    <div className="card-grid animate-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                        {loading ? (
+                            <div style={{ textAlign: 'center', gridColumn: '1/-1', padding: '3rem', color: 'var(--text-muted)' }}>Yükleniyor...</div>
+                        ) : filteredMaterials.map(m => (
+                            <div key={m.id} className="card" style={{
+                                borderTop: `6px solid ${m.current <= m.critical ? 'var(--danger)' : 'var(--primary)'}`,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                flexDirection: 'column'
+                            }} onClick={() => { setSelectedMat(m); setShowAddForm(false); }}>
+                                <div className="flex justify-between items-start" style={{ marginBottom: '1.25rem' }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{m.type}</div>
+                                        <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.1rem' }}>{m.code}</h3>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(m.created_at).toLocaleDateString('tr-TR')}</div>
+                                        {m.current <= m.critical && (
+                                            <span className="badge badge-error" style={{ fontSize: '0.65rem' }}>Kritik Seviye</span>
+                                        )}
+                                    </div>
                                 </div>
-                                {/* Progress bar */}
-                                <div style={{ height: '8px', backgroundColor: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{
-                                        height: '100%',
-                                        width: `${Math.min(100, (mat.current / mat.total) * 100)}%`,
-                                        backgroundColor: mat.current <= mat.critical ? 'var(--danger)' : 'var(--primary)',
-                                        transition: 'width 0.3s ease'
-                                    }}></div>
+                                
+                                <div style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', border: '1px solid var(--border-color)' }}>
+                                    <div className="flex justify-between" style={{ marginBottom: '0.5rem' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Mevcut Stok:</span>
+                                        <span style={{ fontSize: '1.1rem', fontWeight: 800, color: m.current <= m.critical ? 'var(--danger)' : 'var(--text-main)' }}>
+                                            {m.current} {m.type.includes('Kumaş') ? 'mt' : 'ad'}
+                                        </span>
+                                    </div>
+                                    <div style={{ height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            height: '100%',
+                                            width: `${Math.min((m.current / m.total) * 100, 100)}%`,
+                                            backgroundColor: m.current <= m.critical ? 'var(--danger)' : 'var(--success)',
+                                            transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+                                        }} />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-end" style={{ marginTop: 'auto' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        Raf: <strong>{m.location}</strong><br/>
+                                        Tedarikçi: <strong>{m.supplier}</strong>
+                                    </div>
+                                    <button onClick={(e) => { e.stopPropagation(); setQrModalMat(m); }} className="button button-outline" style={{ padding: '0.5rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <QrCode size={18} />
+                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+                        <table className="w-full" style={{ borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                            <thead style={{ backgroundColor: 'var(--bg-color)', borderBottom: '1px solid var(--border-color)' }}>
+                                <tr>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Stok Kodu</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Tip</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Giriş Tarihi</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Konum / Tedarikçi</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Durum</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Miktar</th>
+                                    <th style={{ padding: '1rem', fontSize: '0.85rem' }}>İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredMaterials.map(m => (
+                                    <tr key={m.id} style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }} onClick={() => setSelectedMat(m)}>
+                                        <td style={{ padding: '1rem', fontWeight: 700, color: 'var(--primary)' }}>{m.code}</td>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{m.type}</td>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{new Date(m.created_at).toLocaleDateString('tr-TR')}</td>
+                                        <td style={{ padding: '1rem', fontSize: '0.85rem' }}>
+                                            <div style={{ fontWeight: 600 }}>{m.location}</div>
+                                            <div style={{ color: 'var(--text-muted)' }}>{m.supplier}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {m.current <= m.critical ? (
+                                                <span className="badge badge-error">Kritik</span>
+                                            ) : (
+                                                <span className="badge badge-success">Normal</span>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '1rem' }}>{m.current} mt/ad</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Toplam: {m.total}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <button onClick={(e) => { e.stopPropagation(); setQrModalMat(m); }} className="button button-outline" style={{ padding: '0.4rem', border: 'none' }}><QrCode size={18} /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
             </main>
 
@@ -427,6 +624,7 @@ export default function Warehouse() {
                                 entityId={selectedMat.id}
                                 existingImages={selectedMat.imageUrls}
                                 onImageSaved={(url) => handleImageUpdate(selectedMat!.id, url)}
+                                onImageRemoved={(url) => handleImageRemove(selectedMat!.id, url)}
                             />
                         </div>
 
@@ -436,6 +634,27 @@ export default function Warehouse() {
                         </button>
 
                     </div>
+                </div>
+            )}
+
+            {/* FULL SCREEN IMAGE OVERLAY */}
+            {fullScreenImage && (
+                <div 
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+                    onClick={() => setFullScreenImage(null)}
+                >
+                    <button 
+                        style={{ position: 'absolute', top: '2rem', right: '2rem', background: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-lg)' }}
+                        onClick={() => setFullScreenImage(null)}
+                    >
+                        <X size={24} />
+                    </button>
+                    <img 
+                        src={fullScreenImage} 
+                        alt="Büyük Görsel" 
+                        style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '12px', boxShadow: '0 0 50px rgba(0,0,0,0.5)', objectFit: 'contain' }} 
+                        onClick={(e) => e.stopPropagation()}
+                    />
                 </div>
             )}
 

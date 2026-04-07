@@ -3,6 +3,8 @@ import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
 
+import { supabase } from '../lib/supabase';
+
 export default function OfflineSyncBadge() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -34,12 +36,21 @@ export default function OfflineSyncBadge() {
 
         setIsSyncing(true);
         try {
-            // In a real app we would send the data to Supabase here
             const pendingItems = await db.offlineQueue.where('synced').equals('false').toArray();
             console.log('Syncing items to server:', pendingItems);
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            if (pendingItems.length > 0) {
+                const logsToInsert = pendingItems.map(item => ({
+                    order_id: item.order_id,
+                    station_id: item.station_id,
+                    user_id: item.user_id,
+                    action_type: item.action_type,
+                    photo_url: item.photo_url || null,
+                    created_at: item.created_at
+                }));
+                const { error: insertError } = await supabase.from('action_logs').insert(logsToInsert);
+                if (insertError) throw insertError;
+            }
 
             // Mark as synced
             await Promise.all(
