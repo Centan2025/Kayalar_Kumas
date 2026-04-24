@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List } from 'lucide-react';
+import { PackagePlus, History, ArrowDownToLine, ArrowUpFromLine, Search, QrCode, X, LayoutGrid, List, Edit } from 'lucide-react';
 import OfflineSyncBadge from '../components/OfflineSyncBadge';
 import BackButton from '../components/BackButton';
 import QRPrintModal from '../components/QRPrintModal';
@@ -23,20 +23,38 @@ type Material = {
     inventory_transactions?: Transaction[];
     history: Transaction[];
     imageUrls: string[];
+    stock_item_id?: string;
+};
+
+type StockItem = {
+    id: string;
+    code: string;
+    name: string;
+    category: string;
+    unit: string;
+    critical_level: number;
 };
 
 export default function Warehouse() {
     const [materials, setMaterials] = useState<Material[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'ALL' | 'KUMAŞ' | 'AKSESUAR'>('ALL');
+    const [activeTab, setActiveTab] = useState<'ALL' | 'KUMAŞ' | 'AKSESUAR' | 'KALEMLER'>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [dateFilter, setDateFilter] = useState<Date | null>(null); // Date object
     const [viewMode, setViewMode] = useState<'card' | 'list' | 'history'>('card');
     const [allTransactions, setAllTransactions] = useState<any[]>([]);
+    const [stockItems, setStockItems] = useState<StockItem[]>([]);
 
     useEffect(() => {
-        fetchMaterials();
+        fetchData();
     }, []);
+
+    async function fetchData() {
+        setLoading(true);
+        const { data: itemsData } = await supabase.from('stock_items').select('*');
+        if (itemsData) setStockItems(itemsData);
+        await fetchMaterials();
+    }
 
     async function fetchMaterials() {
         setLoading(true);
@@ -124,11 +142,72 @@ export default function Warehouse() {
     const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
     // Partial Add Form State
-    const [newCode, setNewCode] = useState('');
-    const [newType, setNewType] = useState('Kumaş (Fon)');
+    const [selectedStockItemId, setSelectedStockItemId] = useState('');
     const [newTotal, setNewTotal] = useState('');
     const [newLocation, setNewLocation] = useState('');
     const [newSupplier, setNewSupplier] = useState('');
+
+    // Stock Item Add Form State
+    const [showAddItemForm, setShowAddItemForm] = useState(false);
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [itemCode, setItemCode] = useState('');
+    const [itemName, setItemName] = useState('');
+    const [itemCategory, setItemCategory] = useState('Kumaş (Fon)');
+    const [itemUnit, setItemUnit] = useState('Metre');
+    const [itemCriticalLevel, setItemCriticalLevel] = useState('10');
+
+    const handleEditStockItem = (item: StockItem) => {
+        setEditingItemId(item.id);
+        setItemCode(item.code);
+        setItemName(item.name);
+        setItemCategory(item.category);
+        setItemUnit(item.unit);
+        setItemCriticalLevel(item.critical_level.toString());
+        setShowAddItemForm(true);
+    };
+
+    const handleAddStockItem = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!itemCode || !itemName) return;
+
+        const itemData = {
+            code: itemCode,
+            name: itemName,
+            category: itemCategory,
+            unit: itemUnit,
+            critical_level: parseFloat(itemCriticalLevel) || 0
+        };
+
+        if (editingItemId) {
+            const { error } = await supabase.from('stock_items').update(itemData).eq('id', editingItemId);
+            if (error) {
+                alert('Hata: ' + error.message);
+                return;
+            }
+        } else {
+            const { error } = await supabase.from('stock_items').insert([itemData]);
+            if (error) {
+                alert('Hata: ' + error.message);
+                return;
+            }
+        }
+
+        await fetchData(); // refresh items
+        setShowAddItemForm(false);
+        setEditingItemId(null);
+        setItemCode(''); setItemName(''); setItemCriticalLevel('10');
+    };
+
+    const handleDeleteStockItem = async (id: string) => {
+        if (!window.confirm('Bu stok kalemini silmek istediğinize emin misiniz?')) return;
+        
+        const { error } = await supabase.from('stock_items').delete().eq('id', id);
+        if (error) {
+            alert('Hata: ' + error.message);
+        } else {
+            await fetchData();
+        }
+    };
 
     // Partial Stock Update Form State
     const [updateType, setUpdateType] = useState<'OUT' | 'IN'>('OUT');
@@ -137,18 +216,22 @@ export default function Warehouse() {
 
     const handleAddMaterial = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newCode || !newTotal) return;
+        if (!selectedStockItemId || !newTotal) return;
+
+        const selectedItem = stockItems.find(i => i.id === selectedStockItemId);
+        if (!selectedItem) return;
 
         const matId = `MAT-${Date.now().toString().slice(-4)}`;
         const totalVal = parseFloat(newTotal);
 
         const newMaterial = {
             id: matId,
-            code: newCode,
-            type: newType,
+            stock_item_id: selectedItem.id,
+            code: selectedItem.code, // we store the item code for display
+            type: selectedItem.category, // store category as type for display
             total: totalVal,
             current: totalVal,
-            critical: newType.includes('Kumaş') ? 10 : 20,
+            critical: selectedItem.critical_level,
             location: newLocation || 'Belirtilmedi',
             supplier: newSupplier || 'Belirtilmedi',
         };
@@ -172,7 +255,7 @@ export default function Warehouse() {
         await fetchMaterials();
         setShowAddForm(false);
         setQrModalMat({ ...newMaterial, history: [] } as any);
-        setNewCode(''); setNewTotal(''); setNewLocation(''); setNewSupplier('');
+        setSelectedStockItemId(''); setNewTotal(''); setNewLocation(''); setNewSupplier('');
     };
 
     const handleUpdateStock = async (e: React.FormEvent) => {
@@ -242,30 +325,45 @@ export default function Warehouse() {
                         <p style={{ color: 'var(--text-muted)' }}>Malzeme hareketleri ve anlık envanter takibi.</p>
                     </div>
                     <div className="flex gap-2">
-                        <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)' }}>
-                            <button 
-                                onClick={() => setViewMode('card')} 
-                                title="Kart Görünümü"
-                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'card') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'card') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'card') ? 'var(--shadow-sm)' : 'none' }}>
-                                <LayoutGrid size={20} />
+                        {activeTab === 'KALEMLER' ? (
+                            <button onClick={() => { 
+                                if (showAddItemForm) {
+                                    setEditingItemId(null);
+                                    setItemCode(''); setItemName(''); setItemCriticalLevel('10');
+                                }
+                                setShowAddItemForm(!showAddItemForm); 
+                            }} className="button">
+                                <PackagePlus size={20} />
+                                {showAddItemForm ? 'İptal' : 'Yeni Kalem Tanımla'}
                             </button>
-                            <button 
-                                onClick={() => setViewMode('list')} 
-                                title="Liste Görünümü"
-                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'list') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'list') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'list') ? 'var(--shadow-sm)' : 'none' }}>
-                                <List size={20} />
-                            </button>
-                            <button 
-                                onClick={() => setViewMode('history')} 
-                                title="Tüm Hareket Geçmişi"
-                                style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'history') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'history') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'history') ? 'var(--shadow-sm)' : 'none' }}>
-                                <History size={20} />
-                            </button>
-                        </div>
-                        <button onClick={() => { setShowAddForm(!showAddForm); setSelectedMat(null); }} className="button">
-                            <PackagePlus size={20} />
-                            {showAddForm ? 'İptal' : 'Yeni Rulo Ekle'}
-                        </button>
+                        ) : (
+                            <>
+                                <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)' }}>
+                                    <button 
+                                        onClick={() => setViewMode('card')} 
+                                        title="Kart Görünümü"
+                                        style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'card') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'card') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'card') ? 'var(--shadow-sm)' : 'none' }}>
+                                        <LayoutGrid size={20} />
+                                    </button>
+                                    <button 
+                                        onClick={() => setViewMode('list')} 
+                                        title="Liste Görünümü"
+                                        style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'list') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'list') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'list') ? 'var(--shadow-sm)' : 'none' }}>
+                                        <List size={20} />
+                                    </button>
+                                    <button 
+                                        onClick={() => setViewMode('history')} 
+                                        title="Tüm Hareket Geçmişi"
+                                        style={{ padding: '0.5rem', border: 'none', backgroundColor: (viewMode === 'history') ? 'var(--card-bg)' : 'transparent', color: (viewMode === 'history') ? 'var(--primary)' : 'var(--text-muted)', borderRadius: 'var(--radius-md)', cursor: 'pointer', boxShadow: (viewMode === 'history') ? 'var(--shadow-sm)' : 'none' }}>
+                                        <History size={20} />
+                                    </button>
+                                </div>
+                                <button onClick={() => { setShowAddForm(!showAddForm); setSelectedMat(null); }} className="button">
+                                    <PackagePlus size={20} />
+                                    {showAddForm ? 'İptal' : 'Yeni Rulo Ekle'}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -299,7 +397,7 @@ export default function Warehouse() {
                     </div>
 
                     <div className="flex bg-bgColor" style={{ padding: '0.25rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-color)' }}>
-                        {['ALL', 'KUMAŞ', 'AKSESUAR'].map(tab => (
+                        {['ALL', 'KUMAŞ', 'AKSESUAR', 'KALEMLER'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)}
@@ -314,7 +412,7 @@ export default function Warehouse() {
                                     boxShadow: activeTab === tab ? 'var(--shadow-sm)' : 'none',
                                 }}
                             >
-                                {tab === 'ALL' ? 'Tümü' : tab}
+                                {tab === 'ALL' ? 'Tümü' : tab === 'KALEMLER' ? 'Tanımlar' : tab}
                             </button>
                         ))}
                     </div>
@@ -326,17 +424,14 @@ export default function Warehouse() {
                         <form onSubmit={handleAddMaterial} className="flex flex-col gap-4">
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Ürün / Kumaş Kodu *</label>
-                                    <input type="text" className="input" placeholder="Örn: K-890" value={newCode} onChange={e => setNewCode(e.target.value)} required />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Tür *</label>
-                                    <select className="input" value={newType} onChange={e => setNewType(e.target.value)}>
-                                        <option>Kumaş (Fon)</option>
-                                        <option>Kumaş (Tül)</option>
-                                        <option>Kumaş (Store)</option>
-                                        <option>Aksesuar</option>
-                                        <option>Motorlu Mekanizma</option>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Stok Kalemi Seç *</label>
+                                    <select className="input" value={selectedStockItemId} onChange={e => setSelectedStockItemId(e.target.value)} required>
+                                        <option value="">-- Lütfen Seçin --</option>
+                                        {stockItems.map(item => (
+                                            <option key={item.id} value={item.id}>
+                                                {item.code} - {item.name} ({item.category})
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div>
@@ -357,8 +452,101 @@ export default function Warehouse() {
                     </div>
                 )}
 
-                {/* Materials Content */}
-                {viewMode === 'history' ? (
+                {/* Stock Items View */}
+                {activeTab === 'KALEMLER' ? (
+                    <>
+                        {showAddItemForm && (
+                            <div className="card animate-fade-in" style={{ marginBottom: '2rem', border: '1px solid var(--primary)' }}>
+                                <h3 style={{ marginBottom: '1rem' }}>{editingItemId ? 'Stok Kalemini Düzenle' : 'Yeni Stok Kalemi Tanımla'}</h3>
+                                <form onSubmit={handleAddStockItem} className="flex flex-col gap-4">
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Stok Kodu *</label>
+                                            <input type="text" className="input" placeholder="Örn: K-890" value={itemCode} onChange={e => setItemCode(e.target.value)} required />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Ürün Adı / Açıklama *</label>
+                                            <input type="text" className="input" placeholder="Örn: Siyah Pamuk Fon" value={itemName} onChange={e => setItemName(e.target.value)} required />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Kategori *</label>
+                                            <select className="input" value={itemCategory} onChange={e => setItemCategory(e.target.value)}>
+                                                <option>Kumaş (Fon)</option>
+                                                <option>Kumaş (Tül)</option>
+                                                <option>Kumaş (Store)</option>
+                                                <option>Aksesuar</option>
+                                                <option>Motorlu Mekanizma</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Birim *</label>
+                                            <select className="input" value={itemUnit} onChange={e => setItemUnit(e.target.value)}>
+                                                <option>Metre</option>
+                                                <option>Adet</option>
+                                                <option>Kg</option>
+                                                <option>Kutu</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Kritik Stok Seviyesi</label>
+                                            <input type="number" className="input" placeholder="Uyarı verilecek miktar" value={itemCriticalLevel} onChange={e => setItemCriticalLevel(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <button type="submit" className="button" style={{ alignSelf: 'flex-start' }}>
+                                        {editingItemId ? 'Güncelle' : 'Kaydet'}
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
+                        <div className="card animate-fade-in" style={{ padding: 0, overflowX: 'auto' }}>
+                            <table className="w-full" style={{ borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                                <thead style={{ backgroundColor: 'var(--bg-color)', borderBottom: '1px solid var(--border-color)' }}>
+                                    <tr>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Stok Kodu</th>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Adı</th>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Kategori</th>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Birim</th>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>Kritik Seviye</th>
+                                        <th style={{ padding: '1rem', fontSize: '0.85rem' }}>İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stockItems.filter(i => 
+                                        i.code.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                        i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        i.category.toLowerCase().includes(searchQuery.toLowerCase())
+                                    ).map(item => (
+                                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                            <td style={{ padding: '1rem', fontWeight: 700, color: 'var(--primary)' }}>{item.code}</td>
+                                            <td style={{ padding: '1rem' }}>{item.name}</td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{item.category}</td>
+                                            <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{item.unit}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span className="badge" style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)' }}>
+                                                    {item.critical_level} {item.unit}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                                <button onClick={() => handleEditStockItem(item)} className="button button-outline" style={{ padding: '0.4rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}>
+                                                    <Edit size={16} /> Düzenle
+                                                </button>
+                                                <button onClick={() => handleDeleteStockItem(item.id)} className="button button-outline" style={{ padding: '0.4rem', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                                                    <X size={16} /> Sil
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {stockItems.length === 0 && (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    Kayıtlı stok kalemi bulunamadı.
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : viewMode === 'history' ? (
                     <div className="card animate-fade-in" style={{ padding: 0, overflowX: 'auto' }}>
                          <table className="w-full" style={{ borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
                             <thead style={{ backgroundColor: 'var(--bg-color)', borderBottom: '1px solid var(--border-color)' }}>

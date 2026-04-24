@@ -44,6 +44,13 @@ export type Order = {
     imageUrls: string[];
 };
 
+type StockItem = {
+    id: string;
+    code: string;
+    name: string;
+    category: string;
+};
+
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -55,6 +62,7 @@ export default function Orders() {
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
     const [qrModalOrder, setQrModalOrder] = useState<Order | null>(null);
+    const [stockItems, setStockItems] = useState<StockItem[]>([]);
 
     // Form States
     const [f, setF] = useState({
@@ -96,7 +104,13 @@ export default function Orders() {
 
     useEffect(() => {
         fetchOrders();
+        fetchStockItems();
     }, []);
+
+    async function fetchStockItems() {
+        const { data } = await supabase.from('stock_items').select('id, code, name, category');
+        if (data) setStockItems(data);
+    }
 
     async function fetchOrders() {
         setLoading(true);
@@ -298,7 +312,19 @@ export default function Orders() {
                                 <div key={idx} className="card" style={{ padding: '1rem', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
                                     <div className="flex justify-between" style={{ marginBottom: '1rem' }}><strong>KALEM #{idx + 1}</strong> {orderItems.length > 1 && <button type="button" onClick={() => removeOrderItem(idx)}>Kaldır</button>}</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
-                                        <input className="input" value={item.fabricCode} onChange={e => updateOrderItem(idx, 'fabricCode', e.target.value)} placeholder="Kumaş Kodu" required />
+                                        <select 
+                                            className="input" 
+                                            value={item.fabricCode} 
+                                            onChange={e => updateOrderItem(idx, 'fabricCode', e.target.value)} 
+                                            required
+                                        >
+                                            <option value="">Kumaş Kodu Seçin</option>
+                                            {stockItems.map(si => (
+                                                <option key={si.id} value={si.code}>
+                                                    {si.code} - {si.name}
+                                                </option>
+                                            ))}
+                                        </select>
                                         <input type="number" className="input" value={item.width} onChange={e => updateOrderItem(idx, 'width', e.target.value)} placeholder="En (cm)" required />
                                         <input type="number" className="input" value={item.height} onChange={e => updateOrderItem(idx, 'height', e.target.value)} placeholder="Boy (cm)" required />
                                     </div>
