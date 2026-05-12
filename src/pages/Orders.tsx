@@ -7,6 +7,7 @@ import ImageUploader from '../components/ImageUploader';
 import CustomDatePicker from '../components/CustomDatePicker';
 import LoadingScreen from '../components/LoadingScreen';
 import { supabase } from '../lib/supabase';
+import { SOURCE_LABELS, type OrderSource } from '../lib/marketplaceOrderService';
 
 export type OrderStatus = 'PENDING' | 'CUTTING' | 'SEWING' | 'QC' | 'READY' | 'IN_TRANSIT' | 'DELIVERED';
 
@@ -42,6 +43,8 @@ export type Order = {
     parentOrderId: string | null;
     parts: number;
     imageUrls: string[];
+    source: OrderSource;
+    marketplaceOrderId: string | null;
 };
 
 type StockItem = {
@@ -51,12 +54,25 @@ type StockItem = {
     category: string;
 };
 
+interface OrderGroup {
+    groupKey: string;
+    id: string;
+    customerName: string;
+    customerCity: string;
+    customerPhone: string;
+    createdAt: string;
+    deliveryDate: string;
+    items: Order[];
+    status: OrderStatus;
+}
+
 export default function Orders() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+    const [selectedGroup, setSelectedGroup] = useState<OrderGroup | null>(null);
     const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
+    const [sourceFilter, setSourceFilter] = useState<OrderSource | 'ALL'>('ALL');
     const [startDate, setStartDate] = useState<Date | null>(null);
     const [endDate, setEndDate] = useState<Date | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -143,7 +159,9 @@ export default function Orders() {
                 revisionCount: o.revision_count,
                 parentOrderId: o.parent_order_id,
                 parts: o.parts,
-                imageUrls: o.image_urls || []
+                imageUrls: o.image_urls || [],
+                source: (o.source as OrderSource) || 'MANUAL',
+                marketplaceOrderId: o.marketplace_order_id || null,
             }));
             setOrders(mapped);
         }
@@ -194,7 +212,8 @@ export default function Orders() {
             status: 'PENDING',
             notes: item.notes,
             delivery_date: f.deliveryDate ? f.deliveryDate.toISOString().split('T')[0] : null,
-            parts: parseInt(item.parts) || 1
+            parts: parseInt(item.parts) || 1,
+            source: 'MANUAL',
         }));
         const { error } = await supabase.from('orders').insert(newOrders);
         if (!error) {
@@ -219,7 +238,8 @@ export default function Orders() {
             o.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             o.fabricCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
             o.id.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesStatus && matchesDate && matchesSearch;
+        const matchesSource = sourceFilter === 'ALL' || o.source === sourceFilter;
+        return matchesStatus && matchesDate && matchesSearch && matchesSource;
     });
 
     const groupedOrders = filteredOrders.reduce((acc: any, order: Order) => {
@@ -300,6 +320,22 @@ export default function Orders() {
                     ))}
                 </div>
 
+                {/* Source Filter */}
+                <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', marginBottom: '1.5rem', padding: '0.25rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius-md)' }}>
+                    {(['ALL', 'MANUAL', 'TRENDYOL', 'HEPSIBURADA', 'N11', 'AMAZON', 'CICEKSEPETI'] as (OrderSource | 'ALL')[]).map(s => (
+                        <button key={s} onClick={() => setSourceFilter(s)} style={{
+                            padding: '0.5rem 0.75rem', border: 'none', borderRadius: 'var(--radius-md)',
+                            backgroundColor: sourceFilter === s ? 'var(--card-bg)' : 'transparent',
+                            color: sourceFilter === s ? (s === 'ALL' ? 'var(--primary)' : SOURCE_LABELS[s as OrderSource].color) : 'var(--text-muted)',
+                            fontWeight: sourceFilter === s ? 600 : 400, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                            display: 'flex', alignItems: 'center', gap: '0.35rem',
+                        }}>
+                            {s !== 'ALL' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: SOURCE_LABELS[s as OrderSource].color }} />}
+                            {s === 'ALL' ? `Tüm Kaynak (${orders.length})` : `${SOURCE_LABELS[s as OrderSource].label} (${orders.filter(o => o.source === s).length})`}
+                        </button>
+                    ))}
+                </div>
+
                 {showForm && (
                      <div className="card animate-fade-in" style={{ marginBottom: '2rem', border: '2px solid var(--primary)' }}>
                         <form onSubmit={handleCreate} className="flex flex-col gap-6">
@@ -347,6 +383,11 @@ export default function Orders() {
                                         <div>
                                             <h3 style={{ margin: 0 }}>{group.customerName}</h3>
                                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{group.id} • {group.items.length} Kalem</span>
+                                            {group.items[0]?.source && group.items[0].source !== 'MANUAL' && (
+                                                <span className="badge" style={{ marginTop: '0.25rem', display: 'block', width: 'fit-content', fontSize: '0.65rem', padding: '0.15rem 0.5rem', background: `${SOURCE_LABELS[group.items[0].source as OrderSource]?.color}15`, color: SOURCE_LABELS[group.items[0].source as OrderSource]?.color, border: 'none' }}>
+                                                    {SOURCE_LABELS[group.items[0].source as OrderSource]?.label}
+                                                </span>
+                                            )}
                                         </div>
                                         <span className="badge" style={{ color: STATUS_LABELS[group.status as OrderStatus].color, border: `1px solid ${STATUS_LABELS[group.status as OrderStatus].color}` }}>{STATUS_LABELS[group.status as OrderStatus].label}</span>
                                     </div>
@@ -428,6 +469,20 @@ export default function Orders() {
                             <div className="flex items-center gap-2"><Clock size={14} color="var(--danger)" /> Termin: <strong>{new Date(selectedGroup.deliveryDate).toLocaleDateString('tr-TR')}</strong></div>
                             <div className="flex items-center gap-2"><Users size={14} color="var(--primary)" /> Müşteri: <strong>{selectedGroup.customerName}</strong></div>
                         </div>
+
+                        {selectedGroup.items[0]?.source && selectedGroup.items[0].source !== 'MANUAL' && (
+                            <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(99,102,241,0.05)', borderRadius: '12px', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Marketplace Kaynağı</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: SOURCE_LABELS[selectedGroup.items[0].source as OrderSource].color }} />
+                                        <strong style={{ color: SOURCE_LABELS[selectedGroup.items[0].source as OrderSource].color }}>{SOURCE_LABELS[selectedGroup.items[0].source as OrderSource].label}</strong>
+                                        <span style={{ color: 'var(--text-muted)' }}>— Sipariş No: #{selectedGroup.items[0].marketplaceOrderId}</span>
+                                    </div>
+                                </div>
+                                <button className="button button-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={() => window.open(`/marketplace?search=${selectedGroup.items[0].marketplaceOrderId}`, '_blank')}>Marketplace'te Gör</button>
+                            </div>
+                        )}
                     </header>
                     
                     <main className="container animate-fade-in" style={{ padding: '1.5rem 1rem' }}>

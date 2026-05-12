@@ -10,6 +10,7 @@ const CARDS = [
     { title: 'Paketleme & Sevkiyat', desc: 'Koli parçalarını okut, eksik parça varsa sevk etme.', icon: <Truck size={24} />, path: '/packaging', color: '#f97316', bgColor: 'rgba(249,115,22,0.1)', requiredRole: 'PACKAGER' },
     { title: 'Depo & Stok', desc: 'Ham madde, kumaş toplarını yönet ve envanter durumunu görüntüle.', icon: <Package size={24} />, path: '/warehouse', color: '#3b82f6', bgColor: 'rgba(59,130,246,0.1)', requiredRole: 'ADMIN' },
     { title: 'Rapor Paneli', desc: 'İstasyon performansı, darboğaz analizi ve kritik stok uyarıları.', icon: <BarChart3 size={24} />, path: '/reports', color: '#6366f1', bgColor: 'rgba(99,102,241,0.1)', requiredRole: 'ADMIN' },
+    { title: 'Marketplace Hub', desc: 'Trendyol, Hepsiburada, N11, Amazon, ÇiçekSepeti sipariş takibi.', icon: <ShoppingCart size={24} />, path: '/marketplace', color: '#3b82f6', bgColor: 'rgba(59,130,246,0.1)', requiredRole: 'ADMIN' },
 ];
 
 import { useAuth } from '../context/AuthContext';

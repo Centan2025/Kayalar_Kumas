@@ -9,6 +9,7 @@ import Packaging from './pages/Packaging';
 import Reports from './pages/Reports';
 import Track from './pages/Track';
 import Users from './pages/Users';
+import MarketplaceDashboard from './pages/MarketplaceDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 
@@ -33,6 +34,7 @@ function App() {
             <Route path="/packaging" element={<Packaging />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/marketplace" element={<MarketplaceDashboard />} />
           </Route>
         </Routes>
       </BrowserRouter>
