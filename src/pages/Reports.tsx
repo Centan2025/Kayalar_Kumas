@@ -86,12 +86,18 @@ export default function Reports() {
         const { data: orders } = await supabase.from('orders').select('*');
         const { data: materials } = await supabase.from('materials').select('*');
 
-        const allOrders = orders || [];
+        const allOrders = (orders || []).map((o: any) => ({
+            ...o,
+            customerName: o.customer_name,
+            fabricCode: o.fabric_code,
+            source: o.source || 'MANUAL',
+            marketplaceOrderId: o.marketplace_order_id || null
+        }));
         const allMaterials = materials || [];
 
         // 1. Daily Stats
         const today = new Date().toISOString().split('T')[0];
-        const completedToday = allOrders.filter(o => o.status === 'DELIVERED' && o.updated_at?.startsWith(today)).length;
+        const completedToday = allOrders.filter(o => o.status === 'DELIVERED' && (o as any).updated_at?.startsWith(today)).length;
         const activeOrders = allOrders.filter(o => !['DELIVERED', 'PENDING'].includes(o.status)).length;
         const revisions = allOrders.filter(o => o.revision_count > 0).length;
         const revRate = allOrders.length > 0 ? ((revisions / allOrders.length) * 100).toFixed(1) : '0';
@@ -123,7 +129,7 @@ export default function Reports() {
             date.setDate(date.getDate() - (6 - i));
             const dayName = days[date.getDay()];
             const iso = date.toISOString().split('T')[0];
-            return { day: dayName, count: allOrders.filter(o => o.created_at.startsWith(iso)).length };
+            return { day: dayName, count: allOrders.filter(o => (o as any).created_at.startsWith(iso)).length };
         });
 
         // 5. Monthly Orders
@@ -132,7 +138,7 @@ export default function Reports() {
         const monthlyOrders = Array.from({ length: 12 }).map((_, i) => {
             const mName = months[i];
             const count = allOrders.filter(o => {
-                const d = new Date(o.created_at);
+                const d = new Date((o as any).created_at);
                 return d.getMonth() === i && d.getFullYear() === currentYear;
             }).length;
             return { month: mName, count };

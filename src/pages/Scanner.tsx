@@ -163,7 +163,9 @@ export default function Scanner() {
                 revisionCount: order.revision_count,
                 parentOrderId: order.parent_order_id,
                 parts: order.parts,
-                imageUrls: order.image_urls || []
+                imageUrls: order.image_urls || [],
+                source: order.source || 'MANUAL',
+                marketplaceOrderId: order.marketplace_order_id || null
             };
 
             if (stationRule && mappedOrder.status !== stationRule.acceptStatus) {

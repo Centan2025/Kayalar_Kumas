@@ -41,7 +41,9 @@ export default function QCPackagingStation() {
             setFoundOrder({
                 ...data,
                 customerName: data.customer_name,
-                fabricCode: data.fabric_code
+                fabricCode: data.fabric_code,
+                source: data.source || 'MANUAL',
+                marketplaceOrderId: data.marketplace_order_id || null
             } as any);
         }
     };
